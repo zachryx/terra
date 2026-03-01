@@ -9,8 +9,133 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  ADMIN
+  ORGANIZER
+  SPONSOR
+  ATTENDEE
+}
+
+enum SsoProvider {
+  GOOGLE
+  FACEBOOK
+  LOCAL
+}
+
 model User {
-  id String @id @default(uuid()) 
-  email String @unique
-  password String 
+  id            String      @id @default(uuid())
+  email         String      @unique
+  password      String?
+  name          String?
+  avatar        String?
+  role          UserRole    @default(ATTENDEE)
+  provider      SsoProvider @default(LOCAL)
+  providerId    String?
+  isActive      Boolean     @default(true)
+  isVerified    Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+  securityLogs       SecurityLog[]
+  events        Event[]
+  orders        Order[]
+
+  @@index([email])
+  @@index([provider, providerId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  refreshToken String?  @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  userAgent    String?
+  ipAddress    String?
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  venue       String
+  capacity    Int
+  status      String   @default("DRAFT")
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizerId String
+  organizer   User     @relation(fields: [organizerId], references: [id])
+  tickets     Ticket[]
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  quantity    Int
+  sold        Int      @default(0)
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  orders      OrderItem[]
+}
+
+model Order {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  totalAmount  Float
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+
+  items        OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketId  String
+  ticket    Ticket  @relation(fields: [ticketId], references: [id])
+  quantity  Int
+  price     Float
+}
+
+model VerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  type      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+model SecurityLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      String
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  @@index([userId])
+  @@index([timestamp])
 }
