@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -10,6 +10,10 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { PrismaModule } from '../prisma/prisma.module';
+import { UserRepository } from './repositories/user.repository';
+import { SessionRepository } from './repositories/session.repository';
+import { VerificationTokenRepository } from './repositories/verification-token.repository';
+import { SecurityLogRepository } from './repositories/security-log.repository';
 
 @Module({
   imports: [
@@ -32,7 +36,11 @@ import { PrismaModule } from '../prisma/prisma.module';
     FacebookStrategy,
     JwtAuthGuard,
     RolesGuard,
+    UserRepository,
+    SessionRepository,
+    VerificationTokenRepository,
+    SecurityLogRepository,
   ],
-  exports: [AuthService, JwtAuthGuard, RolesGuard],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, UserRepository],
 })
 export class AuthModule {}
