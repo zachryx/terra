@@ -6,8 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService, JwtVerifyOptions } from '@nestjs/jwt';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,7 +36,6 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
-    private throttlerGuard: ThrottlerGuard,
   ) {
     this.securityConfig = {
       accessTokenMaxAge: 15 * 60 * 1000,
