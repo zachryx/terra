@@ -6,6 +6,7 @@ import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { AuthModule } from './infrastructure/auth/auth.module';
 import { EventsModule } from './infrastructure/events/events.module';
 import { TicketsModule } from './infrastructure/tickets/tickets.module';
+import { PromoCodesModule } from './infrastructure/promo-codes/promo-codes.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TicketsModule } from './infrastructure/tickets/tickets.module';
     AuthModule,
     EventsModule,
     TicketsModule,
+    PromoCodesModule,
   ],
   providers: [],
 })

@@ -46,6 +46,7 @@ model User {
   sessions           Session[]
   verificationTokens VerificationToken[]
   securityLogs       SecurityLog[]
+  promoCodeUsages    PromoCodeUsage[]
   events        Event[]
   orders        Order[]
 
@@ -84,6 +85,7 @@ model Event {
   organizerId String
   organizer   User     @relation(fields: [organizerId], references: [id])
   tickets     Ticket[]
+  promoCodes  PromoCode[]
 }
 
 model Ticket {
@@ -113,15 +115,21 @@ model Order {
   userId       String
   user         User        @relation(fields: [userId], references: [id])
   totalAmount  Float
+  discountAmount Float     @default(0)
+  finalAmount  Float
   status       OrderStatus @default(PENDING)
   paymentId    String?
+  promoCodeId  String?
+  promoCode    PromoCode?  @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   items        OrderItem[]
+  promoCodeUsages PromoCodeUsage[]
 
   @@index([userId])
   @@index([status])
+  @@index([promoCodeId])
 }
 
 model OrderItem {
@@ -158,4 +166,45 @@ model SecurityLog {
 
   @@index([userId])
   @@index([timestamp])
+}
+
+model PromoCode {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  description     String?
+  discountType    String    @default("PERCENTAGE")
+  discountValue   Float
+  minPurchaseAmount Float?
+  maxUses         Int?
+  usedCount       Int       @default(0)
+  maxUsesPerUser  Int       @default(1)
+  isActive        Boolean   @default(true)
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  eventId         String?
+  event           Event?    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ticketTypeId    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  usages          PromoCodeUsage[]
+  orders          Order[]
+
+  @@index([code])
+  @@index([eventId])
+}
+
+model PromoCodeUsage {
+  id            String     @id @default(uuid())
+  promoCodeId   String
+  promoCode     PromoCode  @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+  orderId       String
+  order         Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  discountAmount Float
+  createdAt     DateTime   @default(now())
+
+  @@index([promoCodeId])
+  @@index([userId])
 }
