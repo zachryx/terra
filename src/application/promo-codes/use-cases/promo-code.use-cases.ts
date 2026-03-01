@@ -66,7 +66,6 @@ export class PromoCodeUseCases {
       minPurchaseAmount: dto.minPurchaseAmount,
       maxUses: dto.maxUses,
       maxUsesPerUser: dto.maxUsesPerUser,
-      isActive: dto.isActive,
       startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
       eventId: dto.eventId,
