@@ -10,8 +10,8 @@ import { JwtService, JwtVerifyOptions } from '@nestjs/jwt';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { PrismaService } from '../../prisma/prisma.service';
-import { RegisterDto, LoginDto, RefreshTokenDto } from '../dto/auth.dto';
+import { PrismaService } from '../prisma/prisma.service';
+import { RegisterDto, LoginDto, RefreshTokenDto } from './dto/auth.dto';
 import { SsoProvider, UserRole, User } from '@prisma/client';
 
 interface SecurityConfig {
