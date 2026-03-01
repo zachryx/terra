@@ -4,6 +4,7 @@ import { ExceptionModule } from './infrastructure/exceptions/exceptions.module';
 import { LoggerModule } from './infrastructure/logger/logger.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { AuthModule } from './infrastructure/auth/auth.module';
+import { EventsModule } from './infrastructure/events/events.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from './infrastructure/auth/auth.module';
     LoggerModule,
     PrismaModule,
     AuthModule,
+    EventsModule,
   ],
   providers: [],
 })
