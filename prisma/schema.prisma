@@ -9,6 +9,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
 enum UserRole {
   ADMIN
   ORGANIZER
@@ -80,28 +87,41 @@ model Event {
 }
 
 model Ticket {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  price       Float
-  quantity    Int
-  sold        Int      @default(0)
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  ticketType    String    @default("GENERAL")
+  price         Float
+  quantity      Int
+  sold          Int       @default(0)
+  maxPerOrder   Int       @default(10)
+  minPerOrder   Int       @default(1)
+  saleStartDate DateTime?
+  saleEndDate   DateTime?
+  eventId      String
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  orders      OrderItem[]
+  orders       OrderItem[]
+
+  @@index([eventId])
 }
 
 model Order {
-  id           String   @id @default(uuid())
+  id           String      @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User        @relation(fields: [userId], references: [id])
   totalAmount  Float
-  status       String   @default("PENDING")
-  createdAt    DateTime @default(now())
+  status       OrderStatus @default(PENDING)
+  paymentId    String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   items        OrderItem[]
+
+  @@index([userId])
+  @@index([status])
 }
 
 model OrderItem {
