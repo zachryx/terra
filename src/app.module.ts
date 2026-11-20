@@ -8,6 +8,7 @@ import { EventsModule } from './infrastructure/events/events.module';
 import { TicketsModule } from './infrastructure/tickets/tickets.module';
 import { PromoCodesModule } from './infrastructure/promo-codes/promo-codes.module';
 import { OrdersModule } from './infrastructure/orders/orders.module';
+import { PaymentsModule } from './infrastructure/payments/payments.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './infrastructure/health/health.module';
 
@@ -26,6 +27,7 @@ import { HealthModule } from './infrastructure/health/health.module';
     TicketsModule,
     PromoCodesModule,
     OrdersModule,
+    PaymentsModule,
     HealthModule,
   ],
   providers: [],

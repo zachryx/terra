@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TicketIssuer } from '../ticket-issuer';
 import { IOrderRepository } from '../../../domain/tickets/repositories/order.repository.interface';
 import {
   OrderFilters,
@@ -17,7 +18,10 @@ type Tx = Prisma.TransactionClient;
 
 @Injectable()
 export class OrderRepository implements IOrderRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private issuer: TicketIssuer,
+  ) {}
 
   async placeOrder(input: PlaceOrderInput): Promise<OrderWithItems> {
     return this.prisma.$transaction(async (tx) => {
@@ -79,8 +83,24 @@ export class OrderRepository implements IOrderRepository {
         });
       }
 
+      if (order.status === OrderStatus.PAID) {
+        // Nothing to pay (fully discounted): fulfil immediately.
+        await this.issuer.issueInTx(tx, order.id);
+      }
+
       return order as OrderWithItems;
     });
+  }
+
+  /** Organizer of the event this order is for (orders hold a single event). */
+  async findOrganizerId(orderId: string): Promise<string | null> {
+    const item = await this.prisma.orderItem.findFirst({
+      where: { orderId },
+      select: {
+        ticket: { select: { event: { select: { organizerId: true } } } },
+      },
+    });
+    return item?.ticket.event.organizerId ?? null;
   }
 
   private async reservePromo(tx: Tx, promoCodeId: string, userId: string) {
@@ -124,6 +144,11 @@ export class OrderRepository implements IOrderRepository {
         data: { status: to, expiresAt: null },
       });
       if (moved.count === 0) return false;
+
+      await tx.issuedTicket.updateMany({
+        where: { orderId },
+        data: { status: 'VOID' },
+      });
 
       const items = await tx.orderItem.findMany({ where: { orderId } });
       for (const item of [...items].sort((a, b) =>

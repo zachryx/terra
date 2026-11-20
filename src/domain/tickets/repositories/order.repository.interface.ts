@@ -26,5 +26,7 @@ export interface IOrderRepository {
     to: OrderStatus,
   ): Promise<boolean>;
 
+  findOrganizerId(orderId: string): Promise<string | null>;
+
   findExpiredPendingIds(now: Date, limit: number): Promise<string[]>;
 }

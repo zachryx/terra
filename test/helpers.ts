@@ -12,10 +12,12 @@ export const PASSWORD = 'Str0ng!Passw0rd#1';
 
 export async function createApp(): Promise<INestApplication> {
   process.env.JWT_SECRET ??= 'e2e-test-secret';
+  process.env.TICKET_SIGNING_SECRET ??= 'e2e-ticket-secret';
+  process.env.PAYMENT_PROVIDER = 'fake';
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
-  const app = moduleRef.createNestApplication();
+  const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
   await app.init();
   return app;
