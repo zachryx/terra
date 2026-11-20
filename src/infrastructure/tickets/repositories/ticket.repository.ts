@@ -35,6 +35,10 @@ export class TicketRepository implements ITicketRepository {
     });
   }
 
+  async findByIds(ids: string[]): Promise<TicketModel[]> {
+    return this.prisma.ticket.findMany({ where: { id: { in: ids } } });
+  }
+
   async findAll(filters?: TicketFilters): Promise<TicketModel[]> {
     const where: any = {};
 

@@ -1,12 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { configureApp } from './app.setup';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AllExceptionFilter } from './infrastructure/common/filter/exception.filter';
-import { LoggerService } from './infrastructure/logger/logger.service';
-import { LoggingInterceptor } from './infrastructure/common/interceptors/logger.interceptor';
-import { ResponseInterceptor } from './infrastructure/common/interceptors/response.interceptor';
-import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
 
@@ -30,8 +25,6 @@ async function bootstrap() {
     }),
   );
 
-  app.use(cookieParser());
-
   app.enableCors({
     origin: configService.get('CORS_ORIGIN') || [
       'http://localhost:3000',
@@ -49,23 +42,7 @@ async function bootstrap() {
     maxAge: 600,
   });
 
-  app.useGlobalFilters(new AllExceptionFilter(new LoggerService()));
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    }),
-  );
-
-  app.useGlobalInterceptors(new LoggingInterceptor(new LoggerService()));
-  app.useGlobalInterceptors(new ResponseInterceptor());
-
-  app.setGlobalPrefix('api/v1');
+  configureApp(app);
 
   if (env !== 'production') {
     const config = new DocumentBuilder()

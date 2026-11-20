@@ -7,6 +7,8 @@ import { AuthModule } from './infrastructure/auth/auth.module';
 import { EventsModule } from './infrastructure/events/events.module';
 import { TicketsModule } from './infrastructure/tickets/tickets.module';
 import { PromoCodesModule } from './infrastructure/promo-codes/promo-codes.module';
+import { OrdersModule } from './infrastructure/orders/orders.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './infrastructure/health/health.module';
 
 @Module({
@@ -15,6 +17,7 @@ import { HealthModule } from './infrastructure/health/health.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     ExceptionModule,
     LoggerModule,
     PrismaModule,
@@ -22,6 +25,7 @@ import { HealthModule } from './infrastructure/health/health.module';
     EventsModule,
     TicketsModule,
     PromoCodesModule,
+    OrdersModule,
     HealthModule,
   ],
   providers: [],

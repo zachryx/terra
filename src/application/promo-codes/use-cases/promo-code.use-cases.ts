@@ -161,6 +161,16 @@ export class PromoCodeUseCases {
       };
     }
 
+    if (promoCode.eventId && promoCode.eventId !== dto.eventId) {
+      return {
+        valid: false,
+        discountAmount: 0,
+        finalAmount: dto.purchaseAmount,
+        promoCode,
+        message: 'Promo code is not valid for this event',
+      };
+    }
+
     if (!promoCode.isActive) {
       return {
         valid: false,
