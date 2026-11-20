@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PageArgs } from '../../../application/common/pagination';
+import { StockGate } from '../../redis/stock-gate.service';
 import { TicketIssuer } from '../ticket-issuer';
 import { IOrderRepository } from '../../../domain/tickets/repositories/order.repository.interface';
 import {
@@ -22,6 +23,7 @@ export class OrderRepository implements IOrderRepository {
   constructor(
     private prisma: PrismaService,
     private issuer: TicketIssuer,
+    private stockGate: StockGate,
   ) {}
 
   async placeOrder(input: PlaceOrderInput): Promise<OrderWithItems> {
@@ -138,13 +140,26 @@ export class OrderRepository implements IOrderRepository {
     from: OrderStatus[],
     to: OrderStatus,
   ): Promise<boolean> {
+    const released = await this.releaseInTx(orderId, from, to);
+    if (released.moved) {
+      // Stock came back: drop any "sold out" flag so buyers can try again.
+      await this.stockGate.clear(released.ticketIds);
+    }
+    return released.moved;
+  }
+
+  private async releaseInTx(
+    orderId: string,
+    from: OrderStatus[],
+    to: OrderStatus,
+  ): Promise<{ moved: boolean; ticketIds: string[] }> {
     return this.prisma.$transaction(async (tx) => {
       // Compare-and-set on status: only one caller wins a transition.
       const moved = await tx.order.updateMany({
         where: { id: orderId, status: { in: from } },
         data: { status: to, expiresAt: null },
       });
-      if (moved.count === 0) return false;
+      if (moved.count === 0) return { moved: false, ticketIds: [] };
 
       await tx.issuedTicket.updateMany({
         where: { orderId },
@@ -169,7 +184,7 @@ export class OrderRepository implements IOrderRepository {
           SET "usedCount" = GREATEST("usedCount" - 1, 0)
           WHERE "id" = ${usage.promoCodeId}`;
       }
-      return true;
+      return { moved: true, ticketIds: items.map((i) => i.ticketId) };
     });
   }
 
@@ -196,6 +211,8 @@ export class OrderRepository implements IOrderRepository {
     const rows = await this.prisma.order.findMany({
       where: { status: OrderStatus.PENDING, expiresAt: { lt: now } },
       select: { id: true },
+      // oldest holds first, so a backlog drains in the order it built up
+      orderBy: { expiresAt: 'asc' },
       take: limit,
     });
     return rows.map((r) => r.id);

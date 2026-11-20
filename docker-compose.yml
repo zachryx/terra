@@ -16,11 +16,28 @@ services:
       timeout: 3s
       retries: 10
 
+  # noeviction + AOF: queues, rate limits and stock flags must never be silently evicted
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - terra-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: .
     restart: unless-stopped
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - '${API_PORT:-3000}:3000'
@@ -35,6 +52,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      REDIS_URL: redis://redis:6379
 
   # Local SMTP sink with a web UI at http://localhost:8025
   mailpit:
@@ -46,3 +64,4 @@ services:
 
 volumes:
   terra-db:
+  terra-redis:

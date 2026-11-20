@@ -6,6 +6,9 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { Page, PageQueryDto, pageArgs, toPage } from '../../common/pagination';
+import { createHash } from 'crypto';
+import { ConfigService } from '@nestjs/config';
+import { CacheService } from '../../../infrastructure/redis/cache.service';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 import {
   CreateEventDto,
@@ -19,7 +22,11 @@ import {
 
 @Injectable()
 export class EventUseCases {
-  constructor(private eventRepository: EventRepository) {}
+  constructor(
+    private eventRepository: EventRepository,
+    private cache: CacheService,
+    private config: ConfigService,
+  ) {}
 
   private assertDateRange(start: Date, end: Date) {
     if (!(end > start)) {
@@ -66,6 +73,33 @@ export class EventUseCases {
   }
 
   async findAll(
+    query: EventQueryDto,
+    viewer: { id: string; role: string },
+  ): Promise<Page<Event>> {
+    // Attendees all see the same thing (no drafts), so their view is safe to
+    // share and cache briefly. Organizers/admins see their own drafts: never cached.
+    if (viewer.role === 'ATTENDEE') {
+      const ttl = Number(this.config.get('PUBLIC_CACHE_TTL_SECONDS') ?? 10);
+      const fingerprint = createHash('sha1')
+        .update(
+          JSON.stringify([
+            query.limit,
+            query.cursor,
+            query.includePast,
+            query.status,
+            query.startDate,
+            query.endDate,
+          ]),
+        )
+        .digest('hex');
+      return this.cache.wrap(`events:list:${fingerprint}`, ttl, () =>
+        this.loadEventPage(query, viewer),
+      );
+    }
+    return this.loadEventPage(query, viewer);
+  }
+
+  private async loadEventPage(
     query: EventQueryDto,
     viewer: { id: string; role: string },
   ): Promise<Page<Event>> {

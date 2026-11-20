@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 import { NotificationService } from '../../application/notifications/notification.service';
 import { UserRepository } from './repositories/user.repository';
 import { SessionRepository } from './repositories/session.repository';
@@ -41,6 +42,7 @@ export class AuthService {
     private configService: ConfigService,
     private prisma: PrismaService,
     private notifications: NotificationService,
+    private cache: CacheService,
   ) {
     this.securityConfig = {
       accessTokenMaxAge: 15 * 60 * 1000,
@@ -139,9 +141,18 @@ export class AuthService {
       password: await bcrypt.hash(newPassword, 12),
     });
     // Everyone signed in with the old password is signed out.
-    await this.sessionRepository.deleteByUserId(record.userId);
+    await this.revokeAllSessions(record.userId);
     await this.logSecurityEvent('PASSWORD_RESET', record.userId, requestInfo);
     return { message: 'Password updated. Please sign in again.' };
+  }
+
+  /** Ends every session for a user and drops their cached auth entries. */
+  private async revokeAllSessions(userId: string): Promise<void> {
+    const sessions = await this.sessionRepository.findByUserId(userId);
+    await this.sessionRepository.deleteByUserId(userId);
+    await this.cache.del(
+      ...sessions.map((x) => AuthService.authCacheKey(x.token)),
+    );
   }
 
   private async issueVerificationEmail(user: {
@@ -230,6 +241,7 @@ export class AuthService {
     // Rotation: the old session (and its refresh token) dies with this call,
     // so a stolen refresh token is single-use.
     await this.sessionRepository.delete(session.id);
+    await this.cache.del(AuthService.authCacheKey(session.token));
     await this.logSecurityEvent('TOKEN_REFRESH', user.id, requestInfo);
 
     return this.generateTokens(user);
@@ -282,26 +294,50 @@ export class AuthService {
     }
 
     await this.sessionRepository.deleteByToken(token);
+    await this.cache.del(AuthService.authCacheKey(token));
   }
 
-  async validateToken(token: string): Promise<User | null> {
+  /**
+   * Authenticates an access token against its session. Cached briefly
+   * (never the password hash) so the hot path isn't two DB reads per request;
+   * every action that ends a session invalidates the cache entry immediately.
+   */
+  async validateToken(token: string): Promise<AuthUser | null> {
+    const cacheKey = AuthService.authCacheKey(token);
+    const cached = await this.cache.get<CachedAuth>(cacheKey);
+    if (cached && new Date(cached.expiresAt) > new Date()) {
+      return cached.user;
+    }
+
     try {
       const session = await this.sessionRepository.findByToken(token);
-
       if (!session || session.expiresAt < new Date()) {
         return null;
       }
 
       const user = await this.userRepository.findById(session.userId);
-
       if (!user || !user.isActive) {
         return null;
       }
 
-      return user as User;
+      const authUser: AuthUser = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
+      await this.cache.set(
+        cacheKey,
+        { user: authUser, expiresAt: session.expiresAt },
+        AUTH_CACHE_TTL_SECONDS,
+      );
+      return authUser;
     } catch {
       return null;
     }
+  }
+
+  static authCacheKey(token: string): string {
+    return `auth:${createHash('sha256').update(token).digest('hex')}`;
   }
 
   async verifyEmail(token: string) {
@@ -492,6 +528,19 @@ export class AuthService {
     };
   }
 }
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: UserRole;
+}
+
+interface CachedAuth {
+  user: AuthUser;
+  expiresAt: string | Date;
+}
+
+const AUTH_CACHE_TTL_SECONDS = 30;
 
 interface RequestInfo {
   ipAddress?: string;

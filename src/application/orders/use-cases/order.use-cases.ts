@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,7 @@ import { TicketRepository } from '../../../infrastructure/tickets/repositories/t
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 import { PromoCodeRepository } from '../../../infrastructure/promo-codes/repositories/promo-code.repository';
 import { PromoCodeUseCases } from '../../promo-codes/use-cases/promo-code.use-cases';
+import { StockGate } from '../../../infrastructure/redis/stock-gate.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { Page, pageArgs, toPage } from '../../common/pagination';
 import { CreateOrderDto, OrderQueryDto } from '../dto/order.dto';
@@ -19,6 +21,9 @@ import {
   OrderWithItems,
 } from '../../../domain/tickets/entities/order.entity';
 import { EventStatus } from '../../../domain/events/entities/event.entity';
+
+const SOLD_OUT_MESSAGE =
+  'Not enough tickets available. Someone else may have just bought them.';
 
 export interface Actor {
   id: string;
@@ -35,6 +40,7 @@ export class OrderUseCases {
     private promoCodeRepository: PromoCodeRepository,
     private config: ConfigService,
     private notifications: NotificationService,
+    private stockGate: StockGate,
   ) {}
 
   async create(dto: CreateOrderDto, user: Actor): Promise<OrderWithItems> {
@@ -119,21 +125,45 @@ export class OrderUseCases {
 
     const holdMinutes = Number(this.config.get('ORDER_HOLD_MINUTES') ?? 15);
 
-    const order = await this.orderRepository.placeOrder({
-      reference: OrderUseCases.generateReference(),
-      userId: user.id,
-      currency: this.config.get('DEFAULT_CURRENCY') ?? 'USD',
-      items,
-      totalAmount,
-      discountAmount,
-      finalAmount: totalAmount - discountAmount,
-      expiresAt: new Date(now.getTime() + holdMinutes * 60_000),
-      promo,
-    });
+    // Fast path: known sold out -> no DB transaction at all.
+    const ticketIds = items.map((i) => i.ticketId);
+    if (await this.stockGate.anySoldOut(ticketIds)) {
+      throw new ConflictException(SOLD_OUT_MESSAGE);
+    }
+
+    let order: OrderWithItems;
+    try {
+      order = await this.orderRepository.placeOrder({
+        reference: OrderUseCases.generateReference(),
+        userId: user.id,
+        currency: this.config.get('DEFAULT_CURRENCY') ?? 'USD',
+        items,
+        totalAmount,
+        discountAmount,
+        finalAmount: totalAmount - discountAmount,
+        expiresAt: new Date(now.getTime() + holdMinutes * 60_000),
+        promo,
+      });
+    } catch (err) {
+      if (err instanceof ConflictException) {
+        await this.flagSoldOut(ticketIds);
+      }
+      throw err;
+    }
     if (order.status === OrderStatus.PAID) {
       void this.notifications.sendOrderConfirmation(order.id);
     }
     return order;
+  }
+
+  /** After a stock conflict, remember which tickets are actually exhausted. */
+  private async flagSoldOut(ticketIds: string[]): Promise<void> {
+    const rows = await this.ticketRepository.findByIds(ticketIds);
+    await Promise.all(
+      rows
+        .filter((t) => t.sold >= t.quantity)
+        .map((t) => this.stockGate.markSoldOut(t.id)),
+    );
   }
 
   async findById(id: string, user: Actor): Promise<OrderWithItems> {
@@ -172,23 +202,36 @@ export class OrderUseCases {
     return this.findById(id, user);
   }
 
-  /** Called by the expiry job. Returns how many orders were released. */
-  async expireStaleOrders(limit = 100): Promise<number> {
-    const ids = await this.orderRepository.findExpiredPendingIds(
-      new Date(),
-      limit,
-    );
+  /**
+   * Called by the expiry job. Releases expired holds oldest-first and keeps
+   * going in batches until the backlog is clear (bounded by `maxBatches`, so a
+   * huge backlog can't pin the worker; the next run continues where this stopped).
+   * Returns how many orders were released.
+   */
+  async expireStaleOrders(batchSize = 100, maxBatches = 50): Promise<number> {
     let released = 0;
-    for (const id of ids) {
-      if (
-        await this.orderRepository.releaseOrder(
-          id,
-          [OrderStatus.PENDING],
-          OrderStatus.CANCELLED,
-        )
-      ) {
-        released++;
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const ids = await this.orderRepository.findExpiredPendingIds(
+        new Date(),
+        batchSize,
+      );
+      if (ids.length === 0) break;
+
+      let progressed = 0;
+      for (const id of ids) {
+        if (
+          await this.orderRepository.releaseOrder(
+            id,
+            [OrderStatus.PENDING],
+            OrderStatus.CANCELLED,
+          )
+        ) {
+          released++;
+          progressed++;
+        }
       }
+      // Another worker is draining the same rows; stop rather than spin.
+      if (progressed === 0 || ids.length < batchSize) break;
     }
     return released;
   }

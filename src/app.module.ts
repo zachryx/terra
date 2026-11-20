@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import type Redis from 'ioredis';
+import { RedisModule } from './infrastructure/redis/redis.module';
+import { REDIS_CLIENT } from './infrastructure/redis/redis.constants';
+import { RedisThrottlerStorage } from './infrastructure/redis/redis-throttler.storage';
 import { STRICT_THROTTLE_KEY } from './infrastructure/common/throttle/strict-throttle.decorator';
 import { ExceptionModule } from './infrastructure/exceptions/exceptions.module';
 import { LoggerModule } from './infrastructure/logger/logger.module';
@@ -25,23 +29,27 @@ import { HealthModule } from './infrastructure/health/health.module';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(),
+    RedisModule,
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          name: 'default',
-          ttl: 60_000,
-          limit: Number(config.get('THROTTLE_LIMIT') ?? 120),
-        },
-        {
-          // Applies only to routes tagged with @StrictThrottle().
-          name: 'strict',
-          ttl: 60_000,
-          limit: Number(config.get('STRICT_THROTTLE_LIMIT') ?? 10),
-          skipIf: (ctx) =>
-            !Reflect.getMetadata(STRICT_THROTTLE_KEY, ctx.getHandler()),
-        },
-      ],
+      inject: [ConfigService, REDIS_CLIENT],
+      useFactory: (config: ConfigService, redis: Redis | null) => ({
+        storage: redis ? new RedisThrottlerStorage(redis) : undefined,
+        throttlers: [
+          {
+            name: 'default',
+            ttl: 60_000,
+            limit: Number(config.get('THROTTLE_LIMIT') ?? 120),
+          },
+          {
+            // Applies only to routes tagged with @StrictThrottle().
+            name: 'strict',
+            ttl: 60_000,
+            limit: Number(config.get('STRICT_THROTTLE_LIMIT') ?? 10),
+            skipIf: (ctx) =>
+              !Reflect.getMetadata(STRICT_THROTTLE_KEY, ctx.getHandler()),
+          },
+        ],
+      }),
     }),
     ExceptionModule,
     LoggerModule,

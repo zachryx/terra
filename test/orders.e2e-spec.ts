@@ -264,6 +264,34 @@ describe('Checkout (e2e)', () => {
     expect(stored.status).toBe('CANCELLED');
   });
 
+  it('drains an expiry backlog larger than one batch, oldest first', async () => {
+    const { ticket } = await createPublishedEvent({ quantity: 20 });
+    const orderIds: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const buyer = await createUser(app);
+      const o = (
+        await api(app, buyer)
+          .post('/orders', { items: [{ ticketId: ticket.id, quantity: 1 }] })
+          .expect(201)
+      ).body.data;
+      orderIds.push(o.id);
+    }
+    expect(await soldOf(ticket.id)).toBe(5);
+    await prisma.order.updateMany({
+      where: { id: { in: orderIds } },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    // Batches of 2 => needs several passes within a single call.
+    await app.get(OrderUseCases).expireStaleOrders(2, 100);
+
+    expect(await soldOf(ticket.id)).toBe(0);
+    const left = await prisma.order.count({
+      where: { id: { in: orderIds }, status: 'PENDING' },
+    });
+    expect(left).toBe(0);
+  });
+
   it('rejects orders for unpublished events and out-of-range quantities', async () => {
     const org = api(app, organizer);
     const draft = (

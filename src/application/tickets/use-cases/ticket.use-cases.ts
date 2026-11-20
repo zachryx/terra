@@ -6,6 +6,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Page, pageArgs, toPage } from '../../common/pagination';
+import { ConfigService } from '@nestjs/config';
+import { CacheService } from '../../../infrastructure/redis/cache.service';
 import { TicketRepository } from '../../../infrastructure/tickets/repositories/ticket.repository';
 import {
   CreateTicketDto,
@@ -20,6 +22,8 @@ export class TicketUseCases {
   constructor(
     private ticketRepository: TicketRepository,
     private eventRepository: EventRepository,
+    private cache: CacheService,
+    private config: ConfigService,
   ) {}
 
   async create(
@@ -78,6 +82,21 @@ export class TicketUseCases {
   }
 
   async findByEventId(
+    eventId: string,
+    viewer: { id: string; role: string },
+  ): Promise<TicketModel[]> {
+    // Availability shown to attendees may lag by a few seconds; the order
+    // transaction is what actually enforces stock.
+    if (viewer.role === 'ATTENDEE') {
+      const ttl = Number(this.config.get('TICKET_CACHE_TTL_SECONDS') ?? 3);
+      return this.cache.wrap(`tickets:event:${eventId}`, ttl, () =>
+        this.loadEventTickets(eventId, viewer),
+      );
+    }
+    return this.loadEventTickets(eventId, viewer);
+  }
+
+  private async loadEventTickets(
     eventId: string,
     viewer: { id: string; role: string },
   ): Promise<TicketModel[]> {

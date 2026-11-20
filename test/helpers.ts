@@ -10,7 +10,22 @@ import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
 
 export const PASSWORD = 'Str0ng!Passw0rd#1';
 
-export async function createApp(): Promise<INestApplication> {
+export interface AppOptions {
+  /** Enable Redis for this app instance. Default: off, whatever the shell has set. */
+  redisUrl?: string;
+  /** Extra env applied before the app is created (e.g. STRICT_THROTTLE_LIMIT). */
+  env?: Record<string, string>;
+}
+
+/** Redis used by the Redis-specific suites; they are skipped when unset. */
+export const TEST_REDIS_URL = process.env.TEST_REDIS_URL;
+
+export async function createApp(
+  opts: AppOptions = {},
+): Promise<INestApplication> {
+  if (opts.redisUrl) process.env.REDIS_URL = opts.redisUrl;
+  else delete process.env.REDIS_URL;
+  Object.assign(process.env, opts.env ?? {});
   process.env.JWT_SECRET ??= 'e2e-test-secret';
   process.env.TICKET_SIGNING_SECRET ??= 'e2e-ticket-secret';
   process.env.PAYMENT_PROVIDER = 'fake';
