@@ -11,6 +11,7 @@ import { OrdersModule } from './infrastructure/orders/orders.module';
 import { PaymentsModule } from './infrastructure/payments/payments.module';
 import { CheckinModule } from './infrastructure/checkin/checkin.module';
 import { NotificationsModule } from './infrastructure/notifications/notifications.module';
+import { AnalyticsModule } from './infrastructure/analytics/analytics.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './infrastructure/health/health.module';
 
@@ -32,6 +33,7 @@ import { HealthModule } from './infrastructure/health/health.module';
     PaymentsModule,
     CheckinModule,
     NotificationsModule,
+    AnalyticsModule,
     HealthModule,
   ],
   providers: [],
