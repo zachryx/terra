@@ -7,6 +7,7 @@ import { AuthModule } from './infrastructure/auth/auth.module';
 import { EventsModule } from './infrastructure/events/events.module';
 import { TicketsModule } from './infrastructure/tickets/tickets.module';
 import { PromoCodesModule } from './infrastructure/promo-codes/promo-codes.module';
+import { HealthModule } from './infrastructure/health/health.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PromoCodesModule } from './infrastructure/promo-codes/promo-codes.modul
     EventsModule,
     TicketsModule,
     PromoCodesModule,
+    HealthModule,
   ],
   providers: [],
 })
