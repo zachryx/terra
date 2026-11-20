@@ -1,8 +1,16 @@
+export enum TicketType {
+  GENERAL = 'GENERAL',
+  VIP = 'VIP',
+  EARLY_BIRD = 'EARLY_BIRD',
+  GROUP = 'GROUP',
+}
+
+/** All monetary values are integers in minor units (cents/kobo). */
 export interface Ticket {
   id: string;
   name: string;
   description: string | null;
-  ticketType: string;
+  ticketType: TicketType;
   price: number;
   quantity: number;
   sold: number;
@@ -18,7 +26,7 @@ export interface Ticket {
 export interface CreateTicketInput {
   name: string;
   description?: string;
-  ticketType?: string;
+  ticketType?: TicketType;
   price: number;
   quantity: number;
   maxPerOrder?: number;
@@ -31,7 +39,7 @@ export interface CreateTicketInput {
 export interface UpdateTicketInput {
   name?: string;
   description?: string;
-  ticketType?: string;
+  ticketType?: TicketType;
   price?: number;
   quantity?: number;
   maxPerOrder?: number;
@@ -42,5 +50,5 @@ export interface UpdateTicketInput {
 
 export interface TicketFilters {
   eventId?: string;
-  ticketType?: string;
+  ticketType?: TicketType;
 }

@@ -91,7 +91,7 @@ export class EventRepository implements IEventRepository {
     });
   }
 
-  async updateStatus(id: string, status: string): Promise<Event> {
+  async updateStatus(id: string, status: EventStatus): Promise<Event> {
     return this.prisma.event.update({
       where: { id },
       data: { status },

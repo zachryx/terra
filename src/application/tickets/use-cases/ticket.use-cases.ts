@@ -37,6 +37,12 @@ export class TicketUseCases {
       );
     }
 
+    await this.assertWithinEventCapacity(
+      dto.eventId,
+      dto.quantity,
+      event.capacity,
+    );
+
     return this.ticketRepository.create({
       ...dto,
       saleStartDate: dto.saleStartDate
@@ -80,6 +86,19 @@ export class TicketUseCases {
       );
     }
 
+    if (dto.quantity !== undefined) {
+      if (dto.quantity < ticket.sold) {
+        throw new BadRequestException(
+          `Cannot reduce quantity below the ${ticket.sold} tickets already sold`,
+        );
+      }
+      await this.assertWithinEventCapacity(
+        ticket.eventId,
+        dto.quantity - ticket.quantity,
+        event.capacity,
+      );
+    }
+
     const updateData: any = { ...dto };
     if (dto.saleStartDate) {
       updateData.saleStartDate = new Date(dto.saleStartDate);
@@ -102,6 +121,21 @@ export class TicketUseCases {
     }
 
     return this.ticketRepository.delete(id);
+  }
+
+  /** Total ticket inventory for an event may not exceed the event capacity. */
+  private async assertWithinEventCapacity(
+    eventId: string,
+    additional: number,
+    capacity: number,
+  ): Promise<void> {
+    const existing = await this.ticketRepository.findByEventId(eventId);
+    const allocated = existing.reduce((sum, t) => sum + t.quantity, 0);
+    if (allocated + additional > capacity) {
+      throw new BadRequestException(
+        `Ticket inventory would exceed event capacity (${allocated + additional}/${capacity})`,
+      );
+    }
   }
 
   async checkAvailability(

@@ -1,10 +1,12 @@
 import {
   IsString,
-  IsNumber,
+  IsInt,
+  IsEnum,
   IsOptional,
   Min,
   IsDateString,
 } from 'class-validator';
+import { TicketType } from '../../../domain/tickets/entities/ticket.entity';
 
 export class CreateTicketDto {
   @IsString()
@@ -14,24 +16,25 @@ export class CreateTicketDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
+  @IsEnum(TicketType)
   @IsOptional()
-  ticketType?: string;
+  ticketType?: TicketType;
 
-  @IsNumber()
+  /** Minor units (e.g. cents). */
+  @IsInt()
   @Min(0)
   price: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   quantity: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   maxPerOrder?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   minPerOrder?: number;
@@ -57,26 +60,26 @@ export class UpdateTicketDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
+  @IsEnum(TicketType)
   @IsOptional()
-  ticketType?: string;
+  ticketType?: TicketType;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   price?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   quantity?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   maxPerOrder?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   minPerOrder?: number;
@@ -95,7 +98,7 @@ export class TicketQueryDto {
   @IsOptional()
   eventId?: string;
 
-  @IsString()
+  @IsEnum(TicketType)
   @IsOptional()
-  ticketType?: string;
+  ticketType?: TicketType;
 }

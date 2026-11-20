@@ -1,11 +1,13 @@
 import {
   IsString,
-  IsNumber,
+  IsInt,
+  IsEnum,
   IsOptional,
   Min,
   IsBoolean,
   IsDateString,
 } from 'class-validator';
+import { DiscountType } from '../../../domain/promo-codes/entities/promo-code.entity';
 
 export class CreatePromoCodeDto {
   @IsString()
@@ -15,25 +17,25 @@ export class CreatePromoCodeDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
+  @IsEnum(DiscountType)
   @IsOptional()
-  discountType?: string;
+  discountType?: DiscountType;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   discountValue: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   minPurchaseAmount?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   maxUses?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   maxUsesPerUser?: number;
@@ -64,26 +66,26 @@ export class UpdatePromoCodeDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
+  @IsEnum(DiscountType)
   @IsOptional()
-  discountType?: string;
+  discountType?: DiscountType;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   discountValue?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   minPurchaseAmount?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   maxUses?: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   maxUsesPerUser?: number;
@@ -115,7 +117,7 @@ export class ValidatePromoCodeDto {
   @IsString()
   code: string;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   purchaseAmount: number;
 

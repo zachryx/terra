@@ -15,6 +15,7 @@ import {
   ValidatePromoCodeDto,
 } from '../dto/promo-code.dto';
 import { PromoCode as PromoCodeModel } from '@prisma/client';
+import { DiscountType } from '../../../domain/promo-codes/entities/promo-code.entity';
 
 export interface ValidatePromoCodeResult {
   valid: boolean;
@@ -54,14 +55,18 @@ export class PromoCodeUseCases {
       throw new ConflictException('Promo code already exists');
     }
 
-    if (dto.discountType === 'PERCENTAGE' && dto.discountValue > 100) {
+    if (
+      (dto.discountType ?? DiscountType.PERCENTAGE) ===
+        DiscountType.PERCENTAGE &&
+      dto.discountValue > 100
+    ) {
       throw new BadRequestException('Percentage discount cannot exceed 100%');
     }
 
     return this.promoCodeRepository.create({
       code: dto.code,
       description: dto.description,
-      discountType: dto.discountType as any,
+      discountType: dto.discountType,
       discountValue: dto.discountValue,
       minPurchaseAmount: dto.minPurchaseAmount,
       maxUses: dto.maxUses,
@@ -109,11 +114,9 @@ export class PromoCodeUseCases {
       }
     }
 
-    if (
-      dto.discountType === 'PERCENTAGE' &&
-      dto.discountValue &&
-      dto.discountValue > 100
-    ) {
+    const effectiveType = dto.discountType ?? promoCode.discountType;
+    const effectiveValue = dto.discountValue ?? promoCode.discountValue;
+    if (effectiveType === DiscountType.PERCENTAGE && effectiveValue > 100) {
       throw new BadRequestException('Percentage discount cannot exceed 100%');
     }
 
@@ -227,14 +230,12 @@ export class PromoCodeUseCases {
       };
     }
 
-    let discountAmount = 0;
-    if (promoCode.discountType === 'PERCENTAGE') {
-      discountAmount = (dto.purchaseAmount * promoCode.discountValue) / 100;
-    } else {
-      discountAmount = promoCode.discountValue;
-    }
-
-    const finalAmount = Math.max(0, dto.purchaseAmount - discountAmount);
+    const discountAmount = PromoCodeUseCases.calculateDiscount(
+      promoCode.discountType,
+      promoCode.discountValue,
+      dto.purchaseAmount,
+    );
+    const finalAmount = dto.purchaseAmount - discountAmount;
 
     return {
       valid: true,
@@ -243,6 +244,22 @@ export class PromoCodeUseCases {
       promoCode,
       message: 'Promo code applied successfully',
     };
+  }
+
+  /**
+   * Discount in minor units. Percentages are floored so we never over-discount,
+   * and the result is capped at the purchase amount so totals can't go negative.
+   */
+  static calculateDiscount(
+    type: DiscountType,
+    value: number,
+    purchaseAmount: number,
+  ): number {
+    const raw =
+      type === DiscountType.PERCENTAGE
+        ? Math.floor((purchaseAmount * value) / 100)
+        : value;
+    return Math.min(Math.max(raw, 0), purchaseAmount);
   }
 
   async applyPromoCode(

@@ -1,7 +1,7 @@
 import {
   IsString,
   IsDateString,
-  IsNumber,
+  IsInt,
   IsOptional,
   IsEnum,
   Min,
@@ -25,7 +25,7 @@ export class CreateEventDto {
   @IsString()
   venue: string;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   capacity: number;
 
@@ -55,7 +55,7 @@ export class UpdateEventDto {
   @IsOptional()
   venue?: string;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @IsOptional()
   capacity?: number;

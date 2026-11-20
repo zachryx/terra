@@ -16,6 +16,38 @@ enum OrderStatus {
   REFUNDED
 }
 
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum TicketType {
+  GENERAL
+  VIP
+  EARLY_BIRD
+  GROUP
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum IssuedTicketStatus {
+  VALID
+  CHECKED_IN
+  VOID
+}
+
 enum UserRole {
   ADMIN
   ORGANIZER
@@ -30,25 +62,25 @@ enum SsoProvider {
 }
 
 model User {
-  id            String      @id @default(uuid())
-  email         String      @unique
-  password      String?
-  name          String?
-  avatar        String?
-  role          UserRole    @default(ATTENDEE)
-  provider      SsoProvider @default(LOCAL)
-  providerId    String?
-  isActive      Boolean     @default(true)
-  isVerified    Boolean     @default(false)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id         String      @id @default(uuid())
+  email      String      @unique
+  password   String?
+  name       String?
+  avatar     String?
+  role       UserRole    @default(ATTENDEE)
+  provider   SsoProvider @default(LOCAL)
+  providerId String?
+  isActive   Boolean     @default(true)
+  isVerified Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   sessions           Session[]
   verificationTokens VerificationToken[]
   securityLogs       SecurityLog[]
   promoCodeUsages    PromoCodeUsage[]
-  events        Event[]
-  orders        Order[]
+  events             Event[]
+  orders             Order[]
 
   @@index([email])
   @@index([provider, providerId])
@@ -70,62 +102,74 @@ model Session {
 }
 
 model Event {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   name        String
   description String?
   startDate   DateTime
   endDate     DateTime
   venue       String
   capacity    Int
-  status      String   @default("DRAFT")
+  status      EventStatus @default(DRAFT)
   imageUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
-  organizerId String
-  organizer   User     @relation(fields: [organizerId], references: [id])
-  tickets     Ticket[]
-  promoCodes  PromoCode[]
+  organizerId   String
+  organizer     User           @relation(fields: [organizerId], references: [id])
+  tickets       Ticket[]
+  promoCodes    PromoCode[]
+  issuedTickets IssuedTicket[]
+
+  @@index([organizerId])
+  @@index([status])
 }
 
 model Ticket {
-  id            String    @id @default(uuid())
+  id            String     @id @default(uuid())
   name          String
   description   String?
-  ticketType    String    @default("GENERAL")
-  price         Float
+  ticketType    TicketType @default(GENERAL)
+  // minor units (cents/kobo)
+  price         Int
   quantity      Int
-  sold          Int       @default(0)
-  maxPerOrder   Int       @default(10)
-  minPerOrder   Int       @default(1)
+  sold          Int        @default(0)
+  maxPerOrder   Int        @default(10)
+  minPerOrder   Int        @default(1)
   saleStartDate DateTime?
   saleEndDate   DateTime?
-  eventId      String
-  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  eventId       String
+  event         Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  orders       OrderItem[]
+  orders        OrderItem[]
+  issuedTickets IssuedTicket[]
 
   @@index([eventId])
 }
 
 model Order {
-  id           String      @id @default(uuid())
-  userId       String
-  user         User        @relation(fields: [userId], references: [id])
-  totalAmount  Float
-  discountAmount Float     @default(0)
-  finalAmount  Float
-  status       OrderStatus @default(PENDING)
-  paymentId    String?
-  promoCodeId  String?
-  promoCode    PromoCode?  @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id             String      @id @default(uuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  reference      String      @unique
+  currency       String      @default("USD")
+  // all amounts in minor units (cents/kobo)
+  totalAmount    Int
+  discountAmount Int         @default(0)
+  finalAmount    Int
+  expiresAt      DateTime?
+  status         OrderStatus @default(PENDING)
+  paymentId      String?
+  promoCodeId    String?
+  promoCode      PromoCode?  @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  items        OrderItem[]
+  items           OrderItem[]
   promoCodeUsages PromoCodeUsage[]
+  payments        Payment[]
+  issuedTickets   IssuedTicket[]
 
   @@index([userId])
   @@index([status])
@@ -133,13 +177,14 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  ticketId  String
-  ticket    Ticket  @relation(fields: [ticketId], references: [id])
-  quantity  Int
-  price     Float
+  id       String @id @default(uuid())
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id])
+  quantity Int
+  // unit price in minor units, snapshotted at purchase time
+  price    Int
 }
 
 model VerificationToken {
@@ -156,55 +201,98 @@ model VerificationToken {
 }
 
 model SecurityLog {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event      String
-  ipAddress  String?
-  userAgent  String?
-  timestamp  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     String
+  ipAddress String?
+  userAgent String?
+  timestamp DateTime @default(now())
 
   @@index([userId])
   @@index([timestamp])
 }
 
 model PromoCode {
-  id              String    @id @default(uuid())
-  code            String    @unique
-  description     String?
-  discountType    String    @default("PERCENTAGE")
-  discountValue   Float
-  minPurchaseAmount Float?
-  maxUses         Int?
-  usedCount       Int       @default(0)
-  maxUsesPerUser  Int       @default(1)
-  isActive        Boolean   @default(true)
-  startsAt        DateTime?
-  expiresAt       DateTime?
-  eventId         String?
-  event           Event?    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  ticketTypeId    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                String       @id @default(uuid())
+  code              String       @unique
+  description       String?
+  discountType      DiscountType @default(PERCENTAGE)
+  // PERCENTAGE: whole percent (0-100). FIXED: minor units.
+  discountValue     Int
+  minPurchaseAmount Int?
+  maxUses           Int?
+  usedCount         Int          @default(0)
+  maxUsesPerUser    Int          @default(1)
+  isActive          Boolean      @default(true)
+  startsAt          DateTime?
+  expiresAt         DateTime?
+  eventId           String?
+  event             Event?       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ticketTypeId      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  usages          PromoCodeUsage[]
-  orders          Order[]
+  usages PromoCodeUsage[]
+  orders Order[]
 
   @@index([code])
   @@index([eventId])
 }
 
 model PromoCodeUsage {
-  id            String     @id @default(uuid())
-  promoCodeId   String
-  promoCode     PromoCode  @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
-  userId        String
-  user          User       @relation(fields: [userId], references: [id])
-  orderId       String
-  order         Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  discountAmount Float
-  createdAt     DateTime   @default(now())
+  id             String    @id @default(uuid())
+  promoCodeId    String
+  promoCode      PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  discountAmount Int
+  createdAt      DateTime  @default(now())
 
   @@index([promoCodeId])
   @@index([userId])
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  orderId     String
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider    String
+  providerRef String?       @unique
+  amount      Int
+  currency    String
+  status      PaymentStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([orderId])
+}
+
+model IssuedTicket {
+  id          String             @id @default(uuid())
+  code        String             @unique
+  status      IssuedTicketStatus @default(VALID)
+  orderId     String
+  order       Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketId    String
+  ticket      Ticket             @relation(fields: [ticketId], references: [id])
+  eventId     String
+  event       Event              @relation(fields: [eventId], references: [id])
+  ownerId     String
+  checkedInAt DateTime?
+  checkedInBy String?
+  createdAt   DateTime           @default(now())
+
+  @@index([orderId])
+  @@index([eventId])
+  @@index([ownerId])
+}
+
+model WebhookEvent {
+  id          String   @id
+  provider    String
+  type        String
+  processedAt DateTime @default(now())
 }

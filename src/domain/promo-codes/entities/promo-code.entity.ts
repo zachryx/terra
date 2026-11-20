@@ -7,7 +7,8 @@ export interface PromoCode {
   id: string;
   code: string;
   description: string | null;
-  discountType: string;
+  discountType: DiscountType;
+  /** PERCENTAGE: whole percent 0-100. FIXED: minor units. */
   discountValue: number;
   minPurchaseAmount: number | null;
   maxUses: number | null;
@@ -25,7 +26,7 @@ export interface PromoCode {
 export interface CreatePromoCodeInput {
   code: string;
   description?: string;
-  discountType?: string;
+  discountType?: DiscountType;
   discountValue: number;
   minPurchaseAmount?: number;
   maxUses?: number;
