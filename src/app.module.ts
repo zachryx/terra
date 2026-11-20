@@ -9,6 +9,7 @@ import { TicketsModule } from './infrastructure/tickets/tickets.module';
 import { PromoCodesModule } from './infrastructure/promo-codes/promo-codes.module';
 import { OrdersModule } from './infrastructure/orders/orders.module';
 import { PaymentsModule } from './infrastructure/payments/payments.module';
+import { CheckinModule } from './infrastructure/checkin/checkin.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './infrastructure/health/health.module';
 
@@ -28,6 +29,7 @@ import { HealthModule } from './infrastructure/health/health.module';
     PromoCodesModule,
     OrdersModule,
     PaymentsModule,
+    CheckinModule,
     HealthModule,
   ],
   providers: [],
