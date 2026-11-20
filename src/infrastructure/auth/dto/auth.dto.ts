@@ -3,7 +3,7 @@ import {
   IsString,
   MinLength,
   IsOptional,
-  IsEnum,
+  IsIn,
 } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
@@ -19,7 +19,8 @@ export class RegisterDto {
   @IsOptional()
   name?: string;
 
-  @IsEnum(UserRole)
+  /** Self-service roles only. ADMIN can never be requested via the API. */
+  @IsIn([UserRole.ATTENDEE, UserRole.ORGANIZER])
   @IsOptional()
   role?: UserRole;
 }

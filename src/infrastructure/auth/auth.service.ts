@@ -338,7 +338,6 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
-      iat: Date.now(),
       jti: randomUUID(),
     };
 
