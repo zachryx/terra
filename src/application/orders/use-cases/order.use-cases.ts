@@ -12,6 +12,7 @@ import { TicketRepository } from '../../../infrastructure/tickets/repositories/t
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 import { PromoCodeRepository } from '../../../infrastructure/promo-codes/repositories/promo-code.repository';
 import { PromoCodeUseCases } from '../../promo-codes/use-cases/promo-code.use-cases';
+import { MetricsService } from '../../../infrastructure/metrics/metrics.service';
 import { StockGate } from '../../../infrastructure/redis/stock-gate.service';
 import { OutboxRelay } from '../../../infrastructure/queue/outbox.relay';
 import { Page, pageArgs, toPage } from '../../common/pagination';
@@ -41,6 +42,7 @@ export class OrderUseCases {
     private config: ConfigService,
     private outbox: OutboxRelay,
     private stockGate: StockGate,
+    private metrics: MetricsService,
   ) {}
 
   async create(dto: CreateOrderDto, user: Actor): Promise<OrderWithItems> {
@@ -128,6 +130,7 @@ export class OrderUseCases {
     // Fast path: known sold out -> no DB transaction at all.
     const ticketIds = items.map((i) => i.ticketId);
     if (await this.stockGate.anySoldOut(ticketIds)) {
+      this.metrics.checkoutRejected.inc({ reason: 'sold_out_gate' });
       throw new ConflictException(SOLD_OUT_MESSAGE);
     }
 
@@ -146,10 +149,12 @@ export class OrderUseCases {
       });
     } catch (err) {
       if (err instanceof ConflictException) {
+        this.metrics.checkoutRejected.inc({ reason: 'stock_conflict' });
         await this.flagSoldOut(ticketIds);
       }
       throw err;
     }
+    this.metrics.ordersCreated.inc({ status: order.status });
     if (order.status === OrderStatus.PAID) {
       this.outbox.kick();
     }

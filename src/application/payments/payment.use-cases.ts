@@ -14,6 +14,7 @@ import { PaymentRepository } from '../../infrastructure/payments/repositories/pa
 import { OrderRepository } from '../../infrastructure/orders/repositories/order.repository';
 import { OrderStatus } from '../../domain/tickets/entities/order.entity';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { MetricsService } from '../../infrastructure/metrics/metrics.service';
 import { OutboxRelay } from '../../infrastructure/queue/outbox.relay';
 import { Actor } from '../orders/use-cases/order.use-cases';
 
@@ -27,6 +28,7 @@ export class PaymentUseCases {
     private orderRepository: OrderRepository,
     private prisma: PrismaService,
     private outbox: OutboxRelay,
+    private metrics: MetricsService,
   ) {}
 
   get provider(): string {
@@ -99,6 +101,7 @@ export class PaymentUseCases {
           `Amount mismatch for ${event.providerRef}; order left unpaid`,
         );
       }
+      this.metrics.webhooks.inc({ result });
       return { received: true, result };
     }
 

@@ -19,6 +19,7 @@ import { PaymentsModule } from './infrastructure/payments/payments.module';
 import { CheckinModule } from './infrastructure/checkin/checkin.module';
 import { NotificationsModule } from './infrastructure/notifications/notifications.module';
 import { AnalyticsModule } from './infrastructure/analytics/analytics.module';
+import { MetricsModule } from './infrastructure/metrics/metrics.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
 import { JobsModule } from './infrastructure/queue/jobs.module';
 import { HealthModule } from './infrastructure/health/health.module';
@@ -30,6 +31,7 @@ import { HealthModule } from './infrastructure/health/health.module';
       envFilePath: '.env',
     }),
     QueueModule,
+    MetricsModule,
     RedisModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService, REDIS_CLIENT],

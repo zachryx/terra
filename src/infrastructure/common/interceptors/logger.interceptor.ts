@@ -23,7 +23,7 @@ export class LoggingInterceptor implements NestInterceptor {
       tap(() => {
         this.logger.log(
           `${request.method} ${request.path}`,
-          `ip=${ip} duration=${Date.now() - now}ms`,
+          `id=${request.id} ip=${ip} duration=${Date.now() - now}ms`,
         );
       }),
     );
