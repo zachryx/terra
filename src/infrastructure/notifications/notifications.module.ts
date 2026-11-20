@@ -4,14 +4,12 @@ import { NotificationService } from '../../application/notifications/notificatio
 import { MAILER } from '../../domain/notifications/mailer.interface';
 import { PrismaModule } from '../prisma/prisma.module';
 import { LogMailer } from './log.mailer';
-import { ReminderService } from './reminder.service';
 import { SmtpMailer } from './smtp.mailer';
 
 @Module({
   imports: [PrismaModule],
   providers: [
     LogMailer,
-    ReminderService,
     NotificationService,
     {
       provide: MAILER,

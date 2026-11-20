@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PageArgs } from '../../../application/common/pagination';
+import { INSTANCE_ID } from '../../queue/instance-id';
 import { StockGate } from '../../redis/stock-gate.service';
 import { TicketIssuer } from '../ticket-issuer';
 import { IOrderRepository } from '../../../domain/tickets/repositories/order.repository.interface';
@@ -89,6 +90,12 @@ export class OrderRepository implements IOrderRepository {
       if (order.status === OrderStatus.PAID) {
         // Nothing to pay (fully discounted): fulfil immediately.
         await this.issuer.issueInTx(tx, order.id);
+        await tx.outboxEvent.create({
+          data: {
+            type: 'order.paid',
+            payload: { orderId: order.id, originId: INSTANCE_ID },
+          },
+        });
       }
 
       return order as OrderWithItems;

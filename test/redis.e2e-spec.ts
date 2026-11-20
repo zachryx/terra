@@ -4,13 +4,27 @@ import { createHash } from 'crypto';
 import Redis from 'ioredis';
 import * as request from 'supertest';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
+import { LogMailer } from '../src/infrastructure/notifications/log.mailer';
 import {
   api,
   createApp,
   createUser,
+  PASSWORD,
+  TEST_NS,
+  TEST_QUEUE_PREFIX,
   TEST_REDIS_URL,
   TestUser,
 } from './helpers';
+
+async function eventually<T>(fn: () => T | Promise<T>, ms = 15000): Promise<T> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = await fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`condition not met in ${ms}ms`);
+}
 
 // Needs a real Redis: TEST_REDIS_URL=redis://localhost:6379 npm run test:e2e
 const maybe = TEST_REDIS_URL ? describe : describe.skip;
@@ -25,7 +39,7 @@ maybe('Redis-backed scale features (e2e)', () => {
     new Date(Date.now() + d * 86_400_000).toISOString();
   const http = (app: INestApplication) => request(app.getHttpServer());
   const authKey = (cookie: string) =>
-    'terra:auth:' +
+    `${TEST_NS}:auth:` +
     createHash('sha256')
       .update(/access_token=([^;]+)/.exec(cookie)![1])
       .digest('hex');
@@ -37,22 +51,28 @@ maybe('Redis-backed scale features (e2e)', () => {
 
   beforeAll(async () => {
     redis = new Redis(TEST_REDIS_URL!);
-    await flush('terra:throttle:*');
+    await flush(`${TEST_NS}:throttle:*`);
     const env = { TICKET_CACHE_TTL_SECONDS: '30', STRICT_THROTTLE_LIMIT: '4' };
     a = await createApp({ redisUrl: TEST_REDIS_URL, env });
     b = await createApp({ redisUrl: TEST_REDIS_URL, env });
     prisma = a.get(PrismaService);
     organizer = await createUser(a, UserRole.ORGANIZER);
-    await flush('terra:throttle:*'); // setup logins counted against the strict limit
+    await flush(`${TEST_NS}:throttle:*`); // setup logins counted against the strict limit
   });
   afterAll(async () => {
     await a.close();
     await b.close();
+    // Leave no queue keys behind in the shared Redis.
+    const leftovers = [
+      ...(await redis.keys(`${TEST_QUEUE_PREFIX}:*`)),
+      ...(await redis.keys(`${TEST_NS}:*`)),
+    ];
+    if (leftovers.length) await redis.del(...leftovers);
     await redis.quit();
   });
 
   it('shares rate limits across replicas', async () => {
-    await flush('terra:throttle:*');
+    await flush(`${TEST_NS}:throttle:*`);
     const statuses: number[] = [];
     for (let i = 0; i < 7; i++) {
       const app = i % 2 === 0 ? a : b; // alternate replicas
@@ -67,7 +87,7 @@ maybe('Redis-backed scale features (e2e)', () => {
   });
 
   it('caches auth, never stores the password hash, and logout takes effect on every replica at once', async () => {
-    await flush('terra:throttle:*');
+    await flush(`${TEST_NS}:throttle:*`);
     const user = await createUser(a);
     await http(a).get('/api/v1/auth/me').set('Cookie', user.cookie).expect(200);
 
@@ -87,7 +107,7 @@ maybe('Redis-backed scale features (e2e)', () => {
   });
 
   it('password reset revokes cached sessions immediately', async () => {
-    await flush('terra:throttle:*');
+    await flush(`${TEST_NS}:throttle:*`);
     const user = await createUser(a);
     await http(a).get('/api/v1/auth/me').set('Cookie', user.cookie).expect(200);
     expect(await redis.get(authKey(user.cookie))).not.toBeNull();
@@ -111,7 +131,7 @@ maybe('Redis-backed scale features (e2e)', () => {
   });
 
   it('caches the attendee ticket view briefly but never the organizer view', async () => {
-    await flush('terra:throttle:*');
+    await flush(`${TEST_NS}:throttle:*`);
     const org = api(a, organizer);
     const event = (
       await org
@@ -149,18 +169,18 @@ maybe('Redis-backed scale features (e2e)', () => {
   });
 
   it('does not let organizer/admin traffic write into the shared events cache', async () => {
-    await flush('terra:throttle:*');
-    await flush('terra:events:list:*');
+    await flush(`${TEST_NS}:throttle:*`);
+    await flush(`${TEST_NS}:events:list:*`);
     await api(a, organizer).get('/events?limit=5').expect(200);
-    expect(await redis.keys('terra:events:list:*')).toHaveLength(0);
+    expect(await redis.keys(`${TEST_NS}:events:list:*`)).toHaveLength(0);
 
     const attendee = await createUser(a);
     await api(a, attendee).get('/events?limit=5').expect(200);
-    expect(await redis.keys('terra:events:list:*')).toHaveLength(1);
+    expect(await redis.keys(`${TEST_NS}:events:list:*`)).toHaveLength(1);
   });
 
   it('rejects checkout from Redis once a ticket is sold out, and reopens when stock returns', async () => {
-    await flush('terra:throttle:*');
+    await flush(`${TEST_NS}:throttle:*`);
     const org = api(a, organizer);
     const event = (
       await org
@@ -185,7 +205,7 @@ maybe('Redis-backed scale features (e2e)', () => {
         .expect(201)
     ).body.data;
     const [first, second] = await Promise.all([createUser(a), createUser(b)]);
-    const flag = `terra:soldout:${t.id}`;
+    const flag = `${TEST_NS}:soldout:${t.id}`;
 
     const order = (
       await api(a, first)
@@ -238,6 +258,56 @@ maybe('Redis outage (e2e)', () => {
       .expect(200);
     await api(app, user).get('/events').expect(200);
     await api(app, user).get('/orders').expect(200);
+  });
+
+  it('still sends emails and order confirmations through the in-process fallback', async () => {
+    const mail = app.get(LogMailer);
+    const email = `${Math.random().toString(36).slice(2)}@outage.test`;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({ email, password: PASSWORD })
+      .expect(201);
+    await eventually(() => mail.outbox.some((m) => m.to === email));
+
+    const organizer = await createUser(app, UserRole.ORGANIZER);
+    const future = (d: number) =>
+      new Date(Date.now() + d * 86_400_000).toISOString();
+    const org = api(app, organizer);
+    const event = (
+      await org
+        .post('/events', {
+          name: 'Outage Fest',
+          startDate: future(5),
+          endDate: future(6),
+          venue: 'V',
+          capacity: 20,
+        })
+        .expect(201)
+    ).body.data;
+    await org.post(`/events/${event.id}/publish`).expect(201);
+    const t = (
+      await org
+        .post('/tickets', {
+          name: 'GA',
+          price: 100,
+          quantity: 5,
+          eventId: event.id,
+        })
+        .expect(201)
+    ).body.data;
+    const buyer = await createUser(app);
+    const order = (
+      await api(app, buyer)
+        .post('/orders', { items: [{ ticketId: t.id, quantity: 1 }] })
+        .expect(201)
+    ).body.data;
+    await api(app, buyer).post(`/orders/${order.id}/pay/simulate`).expect(201);
+
+    await eventually(() =>
+      mail.outbox.some(
+        (m) => m.to === buyer.email && m.subject.includes(order.reference),
+      ),
+    );
   });
 
   function http(a: INestApplication) {

@@ -13,7 +13,7 @@ import { EventRepository } from '../../../infrastructure/events/repositories/eve
 import { PromoCodeRepository } from '../../../infrastructure/promo-codes/repositories/promo-code.repository';
 import { PromoCodeUseCases } from '../../promo-codes/use-cases/promo-code.use-cases';
 import { StockGate } from '../../../infrastructure/redis/stock-gate.service';
-import { NotificationService } from '../../notifications/notification.service';
+import { OutboxRelay } from '../../../infrastructure/queue/outbox.relay';
 import { Page, pageArgs, toPage } from '../../common/pagination';
 import { CreateOrderDto, OrderQueryDto } from '../dto/order.dto';
 import {
@@ -39,7 +39,7 @@ export class OrderUseCases {
     private promoCodeUseCases: PromoCodeUseCases,
     private promoCodeRepository: PromoCodeRepository,
     private config: ConfigService,
-    private notifications: NotificationService,
+    private outbox: OutboxRelay,
     private stockGate: StockGate,
   ) {}
 
@@ -151,7 +151,7 @@ export class OrderUseCases {
       throw err;
     }
     if (order.status === OrderStatus.PAID) {
-      void this.notifications.sendOrderConfirmation(order.id);
+      this.outbox.kick();
     }
     return order;
   }

@@ -19,7 +19,8 @@ import { PaymentsModule } from './infrastructure/payments/payments.module';
 import { CheckinModule } from './infrastructure/checkin/checkin.module';
 import { NotificationsModule } from './infrastructure/notifications/notifications.module';
 import { AnalyticsModule } from './infrastructure/analytics/analytics.module';
-import { ScheduleModule } from '@nestjs/schedule';
+import { QueueModule } from './infrastructure/queue/queue.module';
+import { JobsModule } from './infrastructure/queue/jobs.module';
 import { HealthModule } from './infrastructure/health/health.module';
 
 @Module({
@@ -28,12 +29,17 @@ import { HealthModule } from './infrastructure/health/health.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    ScheduleModule.forRoot(),
+    QueueModule,
     RedisModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService, REDIS_CLIENT],
       useFactory: (config: ConfigService, redis: Redis | null) => ({
-        storage: redis ? new RedisThrottlerStorage(redis) : undefined,
+        storage: redis
+          ? new RedisThrottlerStorage(
+              redis,
+              config.get('REDIS_NAMESPACE') ?? 'terra',
+            )
+          : undefined,
         throttlers: [
           {
             name: 'default',
@@ -63,6 +69,7 @@ import { HealthModule } from './infrastructure/health/health.module';
     CheckinModule,
     NotificationsModule,
     AnalyticsModule,
+    JobsModule,
     HealthModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -21,7 +21,10 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
   private readonly logger = new Logger('Throttler');
   private lastWarn = 0;
 
-  constructor(private redis: Redis) {}
+  constructor(
+    private redis: Redis,
+    private namespace = 'terra',
+  ) {}
 
   async increment(
     key: string,
@@ -34,7 +37,7 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
       const [hits, ttlMs] = (await this.redis.eval(
         INCR_SCRIPT,
         1,
-        `terra:throttle:${throttlerName}:${key}`,
+        `${this.namespace}:throttle:${throttlerName}:${key}`,
         String(ttl),
       )) as [number, number];
       const timeToExpire = Math.ceil(ttlMs / 1000);

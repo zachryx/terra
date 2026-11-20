@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Payment, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { INSTANCE_ID } from '../../queue/instance-id';
 import { TicketIssuer } from '../../orders/ticket-issuer';
 import { OrderStatus } from '../../../domain/tickets/entities/order.entity';
 
@@ -84,6 +85,13 @@ export class PaymentRepository {
       });
       if (moved.count === 1) {
         await this.issuer.issueInTx(tx, payment.orderId);
+        // Same transaction as the state change: if this commits, the event exists.
+        await tx.outboxEvent.create({
+          data: {
+            type: 'order.paid',
+            payload: { orderId: payment.orderId, originId: INSTANCE_ID },
+          },
+        });
         return 'settled';
       }
 

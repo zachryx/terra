@@ -4,11 +4,16 @@ import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import * as request from 'supertest';
 import { UserRole } from '@prisma/client';
+import { INSTANCE_ID } from '../src/infrastructure/queue/instance-id';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
 
 export const PASSWORD = 'Str0ng!Passw0rd#1';
+
+/** Redis keyspace for this test process; parallel suites share one Redis. */
+export const TEST_NS = `terra-test-${INSTANCE_ID.slice(0, 8)}`;
+export const TEST_QUEUE_PREFIX = `bull-test-${INSTANCE_ID.slice(0, 8)}`;
 
 export interface AppOptions {
   /** Enable Redis for this app instance. Default: off, whatever the shell has set. */
@@ -33,6 +38,11 @@ export async function createApp(
   process.env.THROTTLE_LIMIT ??= '100000';
   process.env.STRICT_THROTTLE_LIMIT ??= '100000';
   process.env.MAIL_PROVIDER = 'log';
+  // Parallel suites share one DB: keep each process's relay to its own events.
+  process.env.OUTBOX_SCOPE_TO_INSTANCE = 'true';
+  // Parallel suites share one Redis: give each process its own BullMQ keyspace.
+  process.env.QUEUE_PREFIX = TEST_QUEUE_PREFIX;
+  process.env.REDIS_NAMESPACE = TEST_NS;
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();

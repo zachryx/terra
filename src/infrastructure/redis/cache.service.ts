@@ -1,9 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type Redis from 'ioredis';
 
 import { REDIS_CLIENT } from './redis.constants';
-
-const NS = 'terra:';
 
 @Injectable()
 export class CacheService {
@@ -11,7 +10,14 @@ export class CacheService {
   /** In-process single-flight: concurrent misses for one key share one load. */
   private readonly inflight = new Map<string, Promise<unknown>>();
 
-  constructor(@Inject(REDIS_CLIENT) private redis: Redis | null) {}
+  private readonly ns: string;
+
+  constructor(
+    @Inject(REDIS_CLIENT) private redis: Redis | null,
+    config: ConfigService,
+  ) {
+    this.ns = `${config.get('REDIS_NAMESPACE') ?? 'terra'}:`;
+  }
 
   get enabled(): boolean {
     return this.redis !== null;
@@ -20,7 +26,7 @@ export class CacheService {
   async get<T>(key: string): Promise<T | undefined> {
     if (!this.redis) return undefined;
     try {
-      const raw = await this.redis.get(NS + key);
+      const raw = await this.redis.get(this.ns + key);
       return raw === null ? undefined : (JSON.parse(raw) as T);
     } catch (err) {
       this.warn('get', err);
@@ -31,7 +37,12 @@ export class CacheService {
   async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
     if (!this.redis || ttlSeconds <= 0) return;
     try {
-      await this.redis.set(NS + key, JSON.stringify(value), 'EX', ttlSeconds);
+      await this.redis.set(
+        this.ns + key,
+        JSON.stringify(value),
+        'EX',
+        ttlSeconds,
+      );
     } catch (err) {
       this.warn('set', err);
     }
@@ -40,7 +51,7 @@ export class CacheService {
   async del(...keys: string[]): Promise<void> {
     if (!this.redis || keys.length === 0) return;
     try {
-      await this.redis.del(...keys.map((k) => NS + k));
+      await this.redis.del(...keys.map((k) => this.ns + k));
     } catch (err) {
       this.warn('del', err);
     }

@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IMailer, MAILER } from '../../domain/notifications/mailer.interface';
+import { IJobQueue, JOB_QUEUE } from '../../domain/queue/job-queue.interface';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import {
   eventReminderTemplate,
@@ -17,6 +18,7 @@ export class NotificationService {
     @Inject(MAILER) private mailer: IMailer,
     private prisma: PrismaService,
     private config: ConfigService,
+    @Inject(JOB_QUEUE) private queue: IJobQueue,
   ) {}
 
   private get frontendUrl(): string {
@@ -25,51 +27,74 @@ export class NotificationService {
     ).replace(/\/$/, '');
   }
 
+  // --- enqueue (called from request paths; cheap and retryable) -------------
+
   async sendVerification(to: string, name: string | null, token: string) {
+    // The raw token is in the payload: dropped from the queue as soon as it ends.
+    await this.queue.enqueue(
+      'email.verification',
+      { to, name, token },
+      { sensitive: true },
+    );
+  }
+
+  async sendPasswordReset(to: string, token: string) {
+    await this.queue.enqueue(
+      'email.password-reset',
+      { to, token },
+      { sensitive: true },
+    );
+  }
+
+  // --- deliver (run by queue workers; throw so failures are retried) ----------
+
+  async deliverVerification(to: string, name: string | null, token: string) {
     const url = `${this.frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
     await this.mailer.send({ to, ...verifyEmailTemplate(name, url) });
   }
 
-  async sendPasswordReset(to: string, token: string) {
+  async deliverPasswordReset(to: string, token: string) {
     const url = `${this.frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
     await this.mailer.send({ to, ...passwordResetTemplate(url) });
   }
 
-  /** Never throws: a mail outage must not fail checkout or webhooks. */
-  async sendOrderConfirmation(orderId: string): Promise<void> {
-    try {
-      const order = await this.prisma.order.findUnique({
-        where: { id: orderId },
-        include: {
-          user: { select: { email: true } },
-          items: { include: { ticket: { include: { event: true } } } },
-        },
-      });
-      if (!order || order.items.length === 0) return;
-      const event = order.items[0].ticket.event;
-      const quantity = order.items.reduce((n, i) => n + i.quantity, 0);
-      const amount = new Intl.NumberFormat('en', {
-        style: 'currency',
-        currency: order.currency,
-      }).format(order.finalAmount / 100);
-      await this.mailer.send({
-        to: order.user.email,
-        ...orderConfirmationTemplate({
-          reference: order.reference,
-          eventName: event.name,
-          startDate: event.startDate,
-          venue: event.venue,
-          quantity,
-          amountFormatted: amount,
-          ticketsUrl: `${this.frontendUrl}/orders/${order.id}`,
-        }),
-      });
-    } catch (err) {
-      this.logger.error(
-        `Order confirmation failed for ${orderId}`,
-        err as Error,
-      );
-    }
+  /**
+   * Idempotent: delivery is at-least-once (outbox + retries), so a repeat for an
+   * order that was already confirmed does nothing.
+   */
+  async deliverOrderConfirmation(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: { select: { email: true } },
+        items: { include: { ticket: { include: { event: true } } } },
+      },
+    });
+    if (!order || order.items.length === 0 || order.confirmationSentAt) return;
+
+    const event = order.items[0].ticket.event;
+    const quantity = order.items.reduce((n, i) => n + i.quantity, 0);
+    const amount = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: order.currency,
+    }).format(order.finalAmount / 100);
+    await this.mailer.send({
+      to: order.user.email,
+      ...orderConfirmationTemplate({
+        reference: order.reference,
+        eventName: event.name,
+        startDate: event.startDate,
+        venue: event.venue,
+        quantity,
+        amountFormatted: amount,
+        ticketsUrl: `${this.frontendUrl}/orders/${order.id}`,
+      }),
+    });
+    // Mark after sending: a crash in between means a duplicate email, not a lost one.
+    await this.prisma.order.updateMany({
+      where: { id: orderId, confirmationSentAt: null },
+      data: { confirmationSentAt: new Date() },
+    });
   }
 
   /**
