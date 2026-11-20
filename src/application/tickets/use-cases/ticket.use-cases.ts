@@ -10,7 +10,7 @@ import {
   UpdateTicketDto,
   TicketQueryDto,
 } from '../dto/ticket.dto';
-import { Ticket as TicketModel, Event } from '@prisma/client';
+import { Ticket as TicketModel } from '@prisma/client';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 
 @Injectable()

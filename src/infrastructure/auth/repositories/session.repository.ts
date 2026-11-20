@@ -4,7 +4,6 @@ import { ISessionRepository } from '../../../domain/auth/repositories/session.re
 import {
   Session,
   CreateSessionInput,
-  SessionFilters,
 } from '../../../domain/auth/entities/session.entity';
 
 @Injectable()

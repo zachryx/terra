@@ -3,10 +3,8 @@ import {
   IsNumber,
   IsOptional,
   Min,
-  Max,
   IsBoolean,
   IsDateString,
-  IsEnum,
 } from 'class-validator';
 
 export class CreatePromoCodeDto {

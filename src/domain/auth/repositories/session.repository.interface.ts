@@ -1,8 +1,4 @@
-import {
-  Session,
-  CreateSessionInput,
-  SessionFilters,
-} from '../entities/session.entity';
+import { Session, CreateSessionInput } from '../entities/session.entity';
 
 export interface ISessionRepository {
   create(data: CreateSessionInput): Promise<Session>;

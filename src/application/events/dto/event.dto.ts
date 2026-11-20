@@ -5,7 +5,6 @@ import {
   IsOptional,
   IsEnum,
   Min,
-  Max,
 } from 'class-validator';
 import { EventStatus } from '../../../domain/events/entities/event.entity';
 

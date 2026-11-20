@@ -100,7 +100,7 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards()
   @Redirect()
-  async googleAuthRedirect(@Req() req: Request) {
+  async googleAuthRedirect() {
     return { url: '/dashboard' };
   }
 
@@ -113,7 +113,7 @@ export class AuthController {
   @Get('facebook/callback')
   @UseGuards()
   @Redirect()
-  async facebookAuthRedirect(@Req() req: Request) {
+  async facebookAuthRedirect() {
     return { url: '/dashboard' };
   }
 

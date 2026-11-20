@@ -8,12 +8,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { UserRepository } from './repositories/user.repository';
 import { SessionRepository } from './repositories/session.repository';
 import { VerificationTokenRepository } from './repositories/verification-token.repository';
 import { SecurityLogRepository } from './repositories/security-log.repository';
-import { RegisterDto, LoginDto, RefreshTokenDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { UserRole, SsoProvider, User } from '@prisma/client';
 
 interface SecurityConfig {
@@ -69,7 +69,7 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 14);
-    const verificationToken = uuidv4();
+    const verificationToken = randomUUID();
 
     const user = await this.userRepository.create({
       email: dto.email.toLowerCase(),
@@ -339,14 +339,14 @@ export class AuthService {
       email: user.email,
       role: user.role,
       iat: Date.now(),
-      jti: uuidv4(),
+      jti: randomUUID(),
     };
 
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: '15m',
     });
 
-    const refreshToken = existingRefreshToken || uuidv4();
+    const refreshToken = existingRefreshToken || randomUUID();
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
