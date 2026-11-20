@@ -2,10 +2,13 @@ import {
   IsString,
   IsDateString,
   IsInt,
+  IsBoolean,
   IsOptional,
   IsEnum,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { PageQueryDto } from '../../common/pagination';
 import { EventStatus } from '../../../domain/events/entities/event.entity';
 
 export class CreateEventDto {
@@ -65,7 +68,13 @@ export class UpdateEventDto {
   imageUrl?: string;
 }
 
-export class EventQueryDto {
+export class EventQueryDto extends PageQueryDto {
+  /** Include events that already ended. */
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  @IsOptional()
+  includePast?: boolean;
+
   @IsEnum(EventStatus)
   @IsOptional()
   status?: EventStatus;

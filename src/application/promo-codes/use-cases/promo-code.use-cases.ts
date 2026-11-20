@@ -5,6 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Page, pageArgs, toPage } from '../../common/pagination';
 import { PromoCodeRepository } from '../../../infrastructure/promo-codes/repositories/promo-code.repository';
 import { PromoCodeUsageRepository } from '../../../infrastructure/promo-codes/repositories/promo-code-usage.repository';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
@@ -124,15 +125,17 @@ export class PromoCodeUseCases {
     query: PromoCodeQueryDto,
     userId: string,
     userRole: string,
-  ): Promise<PromoCodeModel[]> {
-    const codes = await this.promoCodeRepository.findAll({
-      eventId: query.eventId,
-      isActive: query.isActive,
-    });
-    if (userRole === 'ADMIN') return codes;
-    const mine = await this.eventRepository.findByOrganizer(userId);
-    const ids = new Set(mine.map((e) => e.id));
-    return codes.filter((c) => c.eventId && ids.has(c.eventId));
+  ): Promise<Page<PromoCodeModel>> {
+    const rows = await this.promoCodeRepository.findAll(
+      {
+        eventId: query.eventId,
+        isActive: query.isActive,
+        // Organizers only ever see codes on their own events (global codes are admin-only).
+        organizerId: userRole === 'ADMIN' ? undefined : userId,
+      },
+      pageArgs(query),
+    );
+    return toPage(rows, query);
   }
 
   async findByEventId(

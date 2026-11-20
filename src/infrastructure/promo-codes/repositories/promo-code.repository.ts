@@ -1,3 +1,4 @@
+import { PageArgs } from '../../../application/common/pagination';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IPromoCodeRepository } from '../../../domain/promo-codes/repositories/promo-code.repository.interface';
@@ -42,11 +43,14 @@ export class PromoCodeRepository implements IPromoCodeRepository {
     });
   }
 
-  async findAll(filters?: PromoCodeFilters): Promise<any[]> {
+  async findAll(filters?: PromoCodeFilters, page?: PageArgs): Promise<any[]> {
     const where: any = {};
 
     if (filters?.eventId) {
       where.eventId = filters.eventId;
+    }
+    if (filters?.organizerId) {
+      where.event = { organizerId: filters.organizerId };
     }
     if (filters?.isActive !== undefined) {
       where.isActive = filters.isActive;
@@ -54,7 +58,8 @@ export class PromoCodeRepository implements IPromoCodeRepository {
 
     return this.prisma.promoCode.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...page,
     });
   }
 

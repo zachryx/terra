@@ -64,6 +64,34 @@ export async function createUser(
   return { id: user.id, email, cookie };
 }
 
+/**
+ * Follows `nextCursor` until exhausted and returns every item id. The shared
+ * test DB holds many rows, so a new row isn't necessarily on page 1.
+ */
+export async function listIds(
+  client: ReturnType<typeof api>,
+  path: string,
+  maxPages = 200,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | null = null;
+  const sep = path.includes('?') ? '&' : '?';
+  for (let i = 0; i < maxPages; i++) {
+    const res = await client.get(
+      `${path}${sep}limit=100${cursor ? `&cursor=${cursor}` : ''}`,
+    );
+    if (res.status !== 200) {
+      throw new Error(
+        `GET ${path} -> ${res.status} ${JSON.stringify(res.body)}`,
+      );
+    }
+    ids.push(...res.body.data.items.map((x: { id: string }) => x.id));
+    cursor = res.body.data.nextCursor;
+    if (!cursor) break;
+  }
+  return ids;
+}
+
 export function api(app: INestApplication, user: TestUser) {
   const server = app.getHttpServer();
   return {

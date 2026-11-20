@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsDateString,
 } from 'class-validator';
+import { PageQueryDto } from '../../common/pagination';
 import { DiscountType } from '../../../domain/promo-codes/entities/promo-code.entity';
 
 export class CreatePromoCodeDto {
@@ -103,7 +104,7 @@ export class UpdatePromoCodeDto {
   expiresAt?: string;
 }
 
-export class PromoCodeQueryDto {
+export class PromoCodeQueryDto extends PageQueryDto {
   @IsString()
   @IsOptional()
   eventId?: string;

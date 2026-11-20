@@ -51,6 +51,8 @@ export interface UpdatePromoCodeInput {
 }
 
 export interface PromoCodeFilters {
+  /** Only codes attached to events owned by this organizer. */
+  organizerId?: string;
   eventId?: string;
   isActive?: boolean;
 }

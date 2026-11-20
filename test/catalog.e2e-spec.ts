@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { api, createApp, createUser, TestUser } from './helpers';
+import { api, createApp, createUser, listIds, TestUser } from './helpers';
 
 describe('Events, tickets & promo codes (e2e)', () => {
   let app: INestApplication;
@@ -59,22 +59,12 @@ describe('Events, tickets & promo codes (e2e)', () => {
       const draft = await newEvent(false);
       const published = await newEvent(true);
 
-      const ids = (r: any) => r.body.data.map((e: any) => e.id);
-      expect(
-        ids(await api(app, attendee).get('/events').expect(200)),
-      ).not.toContain(draft.id);
-      expect(
-        ids(await api(app, attendee).get('/events').expect(200)),
-      ).toContain(published.id);
-      expect(
-        ids(await api(app, other).get('/events').expect(200)),
-      ).not.toContain(draft.id);
-      expect(
-        ids(await api(app, organizer).get('/events').expect(200)),
-      ).toContain(draft.id);
-      expect(ids(await api(app, admin).get('/events').expect(200))).toContain(
-        draft.id,
-      );
+      const forAttendee = await listIds(api(app, attendee), '/events');
+      expect(forAttendee).not.toContain(draft.id);
+      expect(forAttendee).toContain(published.id);
+      expect(await listIds(api(app, other), '/events')).not.toContain(draft.id);
+      expect(await listIds(api(app, organizer), '/events')).toContain(draft.id);
+      expect(await listIds(api(app, admin), '/events')).toContain(draft.id);
 
       await api(app, attendee).get(`/events/${draft.id}`).expect(404);
       await api(app, organizer).get(`/events/${draft.id}`).expect(200);
@@ -110,7 +100,7 @@ describe('Events, tickets & promo codes (e2e)', () => {
       const mine = await api(app, organizer)
         .get('/events/my-events')
         .expect(200);
-      expect(mine.body.data.map((x: any) => x.id)).toContain(e.id);
+      expect(mine.body.data.items.map((x: any) => x.id)).toContain(e.id);
       await api(app, organizer).delete(`/events/${e.id}`).expect(200);
       await api(app, organizer).get(`/events/${e.id}`).expect(404);
     });
@@ -220,10 +210,8 @@ describe('Events, tickets & promo codes (e2e)', () => {
       ).body.data;
       await api(app, attendee).get(`/tickets/event/${draft.id}`).expect(404);
       await api(app, organizer).get(`/tickets/event/${draft.id}`).expect(200);
-      const all = await api(app, attendee).get('/tickets').expect(200);
-      expect(all.body.data.map((x: any) => x.id)).not.toContain(t.id);
-      const mine = await api(app, organizer).get('/tickets').expect(200);
-      expect(mine.body.data.map((x: any) => x.id)).toContain(t.id);
+      expect(await listIds(api(app, attendee), '/tickets')).not.toContain(t.id);
+      expect(await listIds(api(app, organizer), '/tickets')).toContain(t.id);
     });
 
     it('cannot shrink quantity below sold or delete a ticket that has orders', async () => {
@@ -306,8 +294,7 @@ describe('Events, tickets & promo codes (e2e)', () => {
       await api(app, attendee).get(`/promo-codes/${myCode.id}`).expect(403);
       await api(app, attendee).get(`/promo-codes/event/${mine.id}`).expect(403);
 
-      const list = await api(app, organizer).get('/promo-codes').expect(200);
-      const ids = list.body.data.map((c: any) => c.id);
+      const ids = await listIds(api(app, organizer), '/promo-codes');
       expect(ids).toContain(myCode.id);
       expect(ids).not.toContain(theirCode.id);
 

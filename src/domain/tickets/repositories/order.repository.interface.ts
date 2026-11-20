@@ -1,3 +1,4 @@
+import { PageArgs } from '../../../application/common/pagination';
 import {
   OrderFilters,
   OrderStatus,
@@ -13,7 +14,7 @@ export interface IOrderRepository {
   placeOrder(input: PlaceOrderInput): Promise<OrderWithItems>;
 
   findById(id: string): Promise<OrderWithItems | null>;
-  findAll(filters?: OrderFilters): Promise<OrderWithItems[]>;
+  findAll(filters?: OrderFilters, page?: PageArgs): Promise<OrderWithItems[]>;
 
   /**
    * Moves an order from one of `from` to `to` and gives back its stock and

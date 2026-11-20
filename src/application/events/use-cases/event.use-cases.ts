@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { Page, PageQueryDto, pageArgs, toPage } from '../../common/pagination';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 import {
   CreateEventDto,
@@ -67,17 +68,29 @@ export class EventUseCases {
   async findAll(
     query: EventQueryDto,
     viewer: { id: string; role: string },
-  ): Promise<Event[]> {
-    return this.eventRepository.findAll({
-      visibleTo: viewer,
-      status: query.status,
-      startDate: query.startDate ? new Date(query.startDate) : undefined,
-      endDate: query.endDate ? new Date(query.endDate) : undefined,
-    });
+  ): Promise<Page<Event>> {
+    const rows = await this.eventRepository.findAll(
+      {
+        includePast: query.includePast,
+        visibleTo: viewer,
+        status: query.status,
+        startDate: query.startDate ? new Date(query.startDate) : undefined,
+        endDate: query.endDate ? new Date(query.endDate) : undefined,
+      },
+      pageArgs(query),
+    );
+    return toPage(rows, query);
   }
 
-  async findByOrganizer(organizerId: string): Promise<Event[]> {
-    return this.eventRepository.findByOrganizer(organizerId);
+  async findByOrganizer(
+    organizerId: string,
+    query: PageQueryDto = {},
+  ): Promise<Page<Event>> {
+    const rows = await this.eventRepository.findByOrganizer(
+      organizerId,
+      pageArgs(query),
+    );
+    return toPage(rows, query);
   }
 
   async update(

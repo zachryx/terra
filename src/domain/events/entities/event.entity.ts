@@ -47,6 +47,8 @@ export interface Viewer {
 }
 
 export interface EventFilters {
+  /** Include events that already ended (default: upcoming/ongoing only). */
+  includePast?: boolean;
   /** Hides drafts from everyone except their organizer and admins. */
   visibleTo?: Viewer;
   status?: EventStatus;

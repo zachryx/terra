@@ -12,6 +12,7 @@ import { EventRepository } from '../../../infrastructure/events/repositories/eve
 import { PromoCodeRepository } from '../../../infrastructure/promo-codes/repositories/promo-code.repository';
 import { PromoCodeUseCases } from '../../promo-codes/use-cases/promo-code.use-cases';
 import { NotificationService } from '../../notifications/notification.service';
+import { Page, pageArgs, toPage } from '../../common/pagination';
 import { CreateOrderDto, OrderQueryDto } from '../dto/order.dto';
 import {
   OrderStatus,
@@ -144,11 +145,18 @@ export class OrderUseCases {
     return order;
   }
 
-  async findAll(query: OrderQueryDto, user: Actor): Promise<OrderWithItems[]> {
-    return this.orderRepository.findAll({
-      userId: user.role === 'ADMIN' ? undefined : user.id,
-      status: query.status,
-    });
+  async findAll(
+    query: OrderQueryDto,
+    user: Actor,
+  ): Promise<Page<OrderWithItems>> {
+    const rows = await this.orderRepository.findAll(
+      {
+        userId: user.role === 'ADMIN' ? undefined : user.id,
+        status: query.status,
+      },
+      pageArgs(query),
+    );
+    return toPage(rows, query);
   }
 
   async cancel(id: string, user: Actor): Promise<OrderWithItems> {

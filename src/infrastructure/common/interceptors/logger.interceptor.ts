@@ -13,18 +13,17 @@ export class LoggingInterceptor implements NestInterceptor {
     const httpContext = context.switchToHttp();
     const request = httpContext.getRequest();
 
-    const ip = this.getIp(request);
+    // Per-request logging is synchronous console I/O. LOG_REQUESTS=false turns
+    // it off for hot paths (the access log usually lives at the proxy).
+    if (process.env.LOG_REQUESTS === 'false') return next.handle();
 
-    this.logger.log(
-      `Incoming Request on ${request.path}`,
-      `method=${request.method} ip=${ip}`,
-    );
+    const ip = this.getIp(request);
 
     return next.handle().pipe(
       tap(() => {
         this.logger.log(
-          `End Request for ${request.path}`,
-          `method=${request.method} ip=${ip} duration=${Date.now() - now}ms`,
+          `${request.method} ${request.path}`,
+          `ip=${ip} duration=${Date.now() - now}ms`,
         );
       }),
     );

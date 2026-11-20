@@ -5,6 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Page, pageArgs, toPage } from '../../common/pagination';
 import { TicketRepository } from '../../../infrastructure/tickets/repositories/ticket.repository';
 import {
   CreateTicketDto,
@@ -64,12 +65,16 @@ export class TicketUseCases {
   async findAll(
     query: TicketQueryDto,
     viewer: { id: string; role: string },
-  ): Promise<TicketModel[]> {
-    return this.ticketRepository.findAll({
-      visibleTo: viewer,
-      eventId: query.eventId,
-      ticketType: query.ticketType,
-    });
+  ): Promise<Page<TicketModel>> {
+    const rows = await this.ticketRepository.findAll(
+      {
+        visibleTo: viewer,
+        eventId: query.eventId,
+        ticketType: query.ticketType,
+      },
+      pageArgs(query),
+    );
+    return toPage(rows, query);
   }
 
   async findByEventId(

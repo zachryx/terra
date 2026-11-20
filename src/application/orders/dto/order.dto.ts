@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { PageQueryDto } from '../../common/pagination';
 import { OrderStatus } from '../../../domain/tickets/entities/order.entity';
 
 export class OrderItemDto {
@@ -39,7 +40,7 @@ export class CreateOrderDto {
   promoCode?: string;
 }
 
-export class OrderQueryDto {
+export class OrderQueryDto extends PageQueryDto {
   @IsEnum(OrderStatus)
   @IsOptional()
   status?: OrderStatus;

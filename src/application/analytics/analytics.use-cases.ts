@@ -8,6 +8,8 @@ import { AnalyticsRepository } from '../../infrastructure/analytics/analytics.re
 import { Actor } from '../orders/use-cases/order.use-cases';
 import { toCsv } from './csv';
 
+const DASHBOARD_EVENT_LIMIT = 20;
+
 @Injectable()
 export class AnalyticsUseCases {
   constructor(
@@ -91,12 +93,13 @@ export class AnalyticsUseCases {
     const events = await this.prisma.event.findMany({
       where: user.role === 'ADMIN' ? {} : { organizerId: user.id },
       select: { id: true, name: true, status: true, startDate: true },
-      orderBy: { startDate: 'desc' },
+      orderBy: [{ startDate: 'desc' }, { id: 'asc' }],
     });
-    const ids = events.map((e) => e.id);
-    const total = await this.summary(ids);
+    // Totals cover every event; the per-event table is capped so the cost
+    // doesn't grow with the number of events an organizer has run.
+    const total = await this.summary(events.map((e) => e.id));
     const perEvent = await Promise.all(
-      events.map(async (e) => {
+      events.slice(0, DASHBOARD_EVENT_LIMIT).map(async (e) => {
         const s = await this.summary([e.id]);
         return {
           id: e.id,

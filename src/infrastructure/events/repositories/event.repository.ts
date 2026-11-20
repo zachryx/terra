@@ -1,3 +1,4 @@
+import { PageArgs } from '../../../application/common/pagination';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IEventRepository } from '../../../domain/events/repositories/event.repository.interface';
@@ -37,7 +38,7 @@ export class EventRepository implements IEventRepository {
     }) as Promise<Event | null>;
   }
 
-  async findAll(filters?: EventFilters): Promise<Event[]> {
+  async findAll(filters?: EventFilters, page?: PageArgs): Promise<Event[]> {
     const where: any = {};
 
     if (filters?.status) {
@@ -59,13 +60,16 @@ export class EventRepository implements IEventRepository {
       where.startDate = { gte: new Date(filters.startDate) };
     }
 
-    if (filters?.endDate) {
-      where.endDate = { lte: new Date(filters.endDate) };
-    }
+    const endDate: any = {};
+    if (!filters?.includePast) endDate.gte = new Date();
+    if (filters?.endDate) endDate.lte = new Date(filters.endDate);
+    if (Object.keys(endDate).length > 0) where.endDate = endDate;
 
     return this.prisma.event.findMany({
       where,
-      orderBy: { startDate: 'asc' },
+      // id breaks ties so keyset pagination is stable
+      orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
+      ...page,
     }) as Promise<Event[]>;
   }
 
@@ -76,10 +80,14 @@ export class EventRepository implements IEventRepository {
     return count > 0;
   }
 
-  async findByOrganizer(organizerId: string): Promise<Event[]> {
+  async findByOrganizer(
+    organizerId: string,
+    page?: PageArgs,
+  ): Promise<Event[]> {
     return this.prisma.event.findMany({
       where: { organizerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...page,
     }) as Promise<Event[]>;
   }
 

@@ -6,6 +6,7 @@ import {
   Min,
   IsDateString,
 } from 'class-validator';
+import { PageQueryDto } from '../../common/pagination';
 import { TicketType } from '../../../domain/tickets/entities/ticket.entity';
 
 export class CreateTicketDto {
@@ -93,7 +94,7 @@ export class UpdateTicketDto {
   saleEndDate?: string;
 }
 
-export class TicketQueryDto {
+export class TicketQueryDto extends PageQueryDto {
   @IsString()
   @IsOptional()
   eventId?: string;

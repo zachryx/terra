@@ -21,6 +21,7 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { PageQueryDto } from '../../../application/common/pagination';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -40,8 +41,8 @@ export class EventController {
 
   @Get('my-events')
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
-  findMyEvents(@CurrentUser() user: any) {
-    return this.eventUseCases.findByOrganizer(user.id);
+  findMyEvents(@Query() query: PageQueryDto, @CurrentUser() user: any) {
+    return this.eventUseCases.findByOrganizer(user.id, query);
   }
 
   @Get(':id')

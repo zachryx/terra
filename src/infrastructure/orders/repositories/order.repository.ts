@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PageArgs } from '../../../application/common/pagination';
 import { TicketIssuer } from '../ticket-issuer';
 import { IOrderRepository } from '../../../domain/tickets/repositories/order.repository.interface';
 import {
@@ -179,11 +180,15 @@ export class OrderRepository implements IOrderRepository {
     }) as Promise<OrderWithItems | null>;
   }
 
-  async findAll(filters?: OrderFilters): Promise<OrderWithItems[]> {
+  async findAll(
+    filters?: OrderFilters,
+    page?: PageArgs,
+  ): Promise<OrderWithItems[]> {
     return this.prisma.order.findMany({
       where: { userId: filters?.userId, status: filters?.status },
       include: { items: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...page,
     }) as Promise<OrderWithItems[]>;
   }
 

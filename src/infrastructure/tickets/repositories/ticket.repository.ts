@@ -6,6 +6,7 @@ import {
   UpdateTicketInput,
   TicketFilters,
 } from '../../../domain/tickets/entities/ticket.entity';
+import { PageArgs } from '../../../application/common/pagination';
 import { Ticket as TicketModel } from '@prisma/client';
 
 @Injectable()
@@ -39,7 +40,10 @@ export class TicketRepository implements ITicketRepository {
     return this.prisma.ticket.findMany({ where: { id: { in: ids } } });
   }
 
-  async findAll(filters?: TicketFilters): Promise<TicketModel[]> {
+  async findAll(
+    filters?: TicketFilters,
+    page?: PageArgs,
+  ): Promise<TicketModel[]> {
     const where: any = {};
 
     if (filters?.eventId) {
@@ -59,7 +63,8 @@ export class TicketRepository implements ITicketRepository {
 
     return this.prisma.ticket.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...page,
     });
   }
 

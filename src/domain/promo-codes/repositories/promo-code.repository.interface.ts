@@ -1,3 +1,4 @@
+import { PageArgs } from '../../../application/common/pagination';
 import {
   CreatePromoCodeInput,
   UpdatePromoCodeInput,
@@ -8,7 +9,7 @@ export interface IPromoCodeRepository {
   create(data: CreatePromoCodeInput): Promise<any>;
   findById(id: string): Promise<any>;
   findByCode(code: string): Promise<any>;
-  findAll(filters?: PromoCodeFilters): Promise<any[]>;
+  findAll(filters?: PromoCodeFilters, page?: PageArgs): Promise<any[]>;
   findByEventId(eventId: string): Promise<any[]>;
   update(id: string, data: UpdatePromoCodeInput): Promise<any>;
   delete(id: string): Promise<void>;
