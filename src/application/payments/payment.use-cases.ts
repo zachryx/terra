@@ -14,6 +14,7 @@ import { PaymentRepository } from '../../infrastructure/payments/repositories/pa
 import { OrderRepository } from '../../infrastructure/orders/repositories/order.repository';
 import { OrderStatus } from '../../domain/tickets/entities/order.entity';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationService } from '../notifications/notification.service';
 import { Actor } from '../orders/use-cases/order.use-cases';
 
 @Injectable()
@@ -25,6 +26,7 @@ export class PaymentUseCases {
     private paymentRepository: PaymentRepository,
     private orderRepository: OrderRepository,
     private prisma: PrismaService,
+    private notifications: NotificationService,
   ) {}
 
   get provider(): string {
@@ -88,7 +90,13 @@ export class PaymentUseCases {
         event.providerRef,
         event.amount,
       );
-      if (result === 'needs_refund') {
+      if (result === 'settled') {
+        const payment = await this.paymentRepository.findByProviderRef(
+          event.providerRef,
+        );
+        if (payment)
+          void this.notifications.sendOrderConfirmation(payment.orderId);
+      } else if (result === 'needs_refund') {
         await this.refundLatePayment(event.providerRef);
       } else if (result === 'amount_mismatch') {
         this.logger.error(

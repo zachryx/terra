@@ -7,10 +7,11 @@ import { StripeGateway } from './gateways/stripe.gateway';
 import { PaymentUseCases } from '../../application/payments/payment.use-cases';
 import { PAYMENT_GATEWAY } from '../../domain/payments/payment-gateway.interface';
 import { PrismaModule } from '../prisma/prisma.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { OrdersModule } from '../orders/orders.module';
 
 @Module({
-  imports: [PrismaModule, OrdersModule],
+  imports: [PrismaModule, OrdersModule, NotificationsModule],
   controllers: [PaymentController],
   providers: [
     PaymentRepository,

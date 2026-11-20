@@ -30,6 +30,7 @@ export interface CreateUserInput {
 
 export interface UpdateUserInput {
   name?: string;
+  password?: string;
   avatar?: string;
   isActive?: boolean;
   isVerified?: boolean;

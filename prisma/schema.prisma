@@ -114,11 +114,12 @@ model Event {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  organizerId   String
-  organizer     User           @relation(fields: [organizerId], references: [id])
-  tickets       Ticket[]
-  promoCodes    PromoCode[]
-  issuedTickets IssuedTicket[]
+  organizerId    String
+  organizer      User           @relation(fields: [organizerId], references: [id])
+  tickets        Ticket[]
+  promoCodes     PromoCode[]
+  issuedTickets  IssuedTicket[]
+  reminderSentAt DateTime?
 
   @@index([organizerId])
   @@index([status])
@@ -295,4 +296,12 @@ model WebhookEvent {
   provider    String
   type        String
   processedAt DateTime @default(now())
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  email     String
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
 }

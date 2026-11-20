@@ -8,7 +8,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../../application/notifications/notification.service';
 import { UserRepository } from './repositories/user.repository';
 import { SessionRepository } from './repositories/session.repository';
 import { VerificationTokenRepository } from './repositories/verification-token.repository';
@@ -30,11 +32,6 @@ interface SecurityConfig {
 @Injectable()
 export class AuthService {
   private readonly securityConfig: SecurityConfig;
-  private readonly loginAttempts = new Map<
-    string,
-    { count: number; lockedUntil?: Date }
-  >();
-
   constructor(
     private userRepository: UserRepository,
     private sessionRepository: SessionRepository,
@@ -42,6 +39,8 @@ export class AuthService {
     private securityLogRepository: SecurityLogRepository,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private prisma: PrismaService,
+    private notifications: NotificationService,
   ) {
     this.securityConfig = {
       accessTokenMaxAge: 15 * 60 * 1000,
@@ -57,20 +56,15 @@ export class AuthService {
 
   async register(dto: RegisterDto, requestInfo?: RequestInfo) {
     this.validatePassword(dto.password);
-    this.checkAccountLock(dto.email);
 
     const existingUser = await this.userRepository.findByEmail(
       dto.email.toLowerCase(),
     );
-
     if (existingUser) {
-      this.recordFailedAttempt(dto.email);
       throw new ConflictException('Email already registered');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, 14);
-    const verificationToken = randomUUID();
-
+    const hashedPassword = await bcrypt.hash(dto.password, 12);
     const user = await this.userRepository.create({
       email: dto.email.toLowerCase(),
       password: hashedPassword,
@@ -79,31 +73,116 @@ export class AuthService {
       provider: SsoProvider.LOCAL,
     });
 
-    await this.verificationTokenRepository.create({
-      userId: user.id,
-      token: verificationToken,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      type: 'EMAIL_VERIFICATION',
-    });
-
+    await this.issueVerificationEmail(user);
     await this.logSecurityEvent('REGISTER', user.id, requestInfo);
 
-    return this.generateTokens(user);
+    // No session until the email is verified (login enforces the same rule).
+    return {
+      user: { id: user.id, email: user.email, role: user.role },
+      message: 'Account created. Check your email to verify your address.',
+    };
+  }
+
+  async resendVerification(email: string) {
+    const user = await this.userRepository.findByEmail(email.toLowerCase());
+    // Same response whether or not the account exists (no enumeration).
+    if (user && !user.isVerified && user.provider === SsoProvider.LOCAL) {
+      await this.issueVerificationEmail(user);
+    }
+    return { message: 'If the account needs verification, an email was sent.' };
+  }
+
+  async forgotPassword(email: string, requestInfo?: RequestInfo) {
+    const user = await this.userRepository.findByEmail(email.toLowerCase());
+    if (user && user.isActive && user.provider === SsoProvider.LOCAL) {
+      const raw = randomBytes(32).toString('base64url');
+      await this.verificationTokenRepository.deleteByUserIdAndType(
+        user.id,
+        'PASSWORD_RESET',
+      );
+      await this.verificationTokenRepository.create({
+        userId: user.id,
+        token: AuthService.hashToken(raw),
+        type: 'PASSWORD_RESET',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      await this.logSecurityEvent(
+        'PASSWORD_RESET_REQUESTED',
+        user.id,
+        requestInfo,
+      );
+      await this.notifications.sendPasswordReset(user.email, raw);
+    }
+    return { message: 'If that email is registered, a reset link was sent.' };
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    requestInfo?: RequestInfo,
+  ) {
+    this.validatePassword(newPassword);
+    const record = await this.verificationTokenRepository.findByToken(
+      AuthService.hashToken(token),
+    );
+    if (
+      !record ||
+      record.type !== 'PASSWORD_RESET' ||
+      record.expiresAt < new Date()
+    ) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Single use: consuming the token first means a replay can't win a race.
+    await this.verificationTokenRepository.delete(record.id);
+    await this.userRepository.update(record.userId, {
+      password: await bcrypt.hash(newPassword, 12),
+    });
+    // Everyone signed in with the old password is signed out.
+    await this.sessionRepository.deleteByUserId(record.userId);
+    await this.logSecurityEvent('PASSWORD_RESET', record.userId, requestInfo);
+    return { message: 'Password updated. Please sign in again.' };
+  }
+
+  private async issueVerificationEmail(user: {
+    id: string;
+    email: string;
+    name: string | null;
+  }) {
+    const raw = randomBytes(32).toString('base64url');
+    await this.verificationTokenRepository.deleteByUserIdAndType(
+      user.id,
+      'EMAIL_VERIFICATION',
+    );
+    await this.verificationTokenRepository.create({
+      userId: user.id,
+      token: AuthService.hashToken(raw),
+      type: 'EMAIL_VERIFICATION',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+    await this.notifications.sendVerification(user.email, user.name, raw);
+  }
+
+  /** Tokens are stored hashed so a database leak can't be replayed. */
+  static hashToken(raw: string): string {
+    return createHash('sha256').update(raw).digest('hex');
   }
 
   async login(dto: LoginDto, requestInfo?: RequestInfo) {
-    this.checkAccountLock(dto.email.toLowerCase());
+    const email = dto.email.toLowerCase();
+    await this.checkAccountLock(email);
 
-    const user = await this.userRepository.findByEmail(dto.email.toLowerCase());
+    const user = await this.userRepository.findByEmail(email);
 
     if (!user || !user.password) {
+      await this.recordFailedAttempt(email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
 
     if (!isPasswordValid) {
-      this.recordFailedAttempt(dto.email.toLowerCase());
+      await this.recordFailedAttempt(email);
       await this.logSecurityEvent('LOGIN_FAILED', user.id, requestInfo);
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -123,7 +202,7 @@ export class AuthService {
       );
     }
 
-    this.clearFailedAttempts(dto.email.toLowerCase());
+    await this.clearFailedAttempts(email);
 
     await this.logSecurityEvent('LOGIN_SUCCESS', user.id, requestInfo);
 
@@ -148,9 +227,12 @@ export class AuthService {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    // Rotation: the old session (and its refresh token) dies with this call,
+    // so a stolen refresh token is single-use.
+    await this.sessionRepository.delete(session.id);
     await this.logSecurityEvent('TOKEN_REFRESH', user.id, requestInfo);
 
-    return this.generateTokens(user, session.refreshToken);
+    return this.generateTokens(user);
   }
 
   async handleSsoCallback(
@@ -164,6 +246,14 @@ export class AuthService {
     );
 
     if (!user) {
+      const sameEmail = await this.userRepository.findByEmail(
+        profile.email.toLowerCase(),
+      );
+      if (sameEmail) {
+        throw new ConflictException(
+          'An account with this email already exists. Sign in with your original method.',
+        );
+      }
       user = await this.userRepository.create({
         email: profile.email.toLowerCase(),
         name: profile.name,
@@ -215,10 +305,15 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
-    const verification =
-      await this.verificationTokenRepository.findByToken(token);
+    const verification = await this.verificationTokenRepository.findByToken(
+      AuthService.hashToken(token),
+    );
 
-    if (!verification || verification.expiresAt < new Date()) {
+    if (
+      !verification ||
+      verification.type !== 'EMAIL_VERIFICATION' ||
+      verification.expiresAt < new Date()
+    ) {
       throw new UnauthorizedException('Invalid or expired verification token');
     }
 
@@ -282,38 +377,41 @@ export class AuthService {
     }
   }
 
-  private checkAccountLock(email: string): void {
-    const attempt = this.loginAttempts.get(email.toLowerCase());
-
-    if (attempt && attempt.lockedUntil && attempt.lockedUntil > new Date()) {
-      const remainingMinutes = Math.ceil(
-        (attempt.lockedUntil.getTime() - Date.now()) / 60000,
-      );
+  /** Locked when there are too many failures inside the lockout window. */
+  private async checkAccountLock(email: string): Promise<void> {
+    const { maxLoginAttempts, lockoutDuration } = this.securityConfig;
+    const since = new Date(Date.now() - lockoutDuration);
+    const recent = await this.prisma.loginAttempt.findMany({
+      where: { email, createdAt: { gt: since } },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    });
+    if (recent.length >= maxLoginAttempts) {
+      const unlockAt =
+        recent[recent.length - maxLoginAttempts].createdAt.getTime() +
+        lockoutDuration;
+      const minutes = Math.max(1, Math.ceil((unlockAt - Date.now()) / 60000));
       throw new ForbiddenException(
-        `Account is temporarily locked. Try again in ${remainingMinutes} minutes`,
+        `Account is temporarily locked. Try again in ${minutes} minutes`,
       );
     }
   }
 
-  private recordFailedAttempt(email: string): void {
-    const current = this.loginAttempts.get(email.toLowerCase()) || { count: 0 };
-    const newCount = current.count + 1;
-
-    if (newCount >= this.securityConfig.maxLoginAttempts) {
-      const lockedUntil = new Date(
-        Date.now() + this.securityConfig.lockoutDuration,
-      );
-      this.loginAttempts.set(email.toLowerCase(), {
-        count: newCount,
-        lockedUntil,
-      });
-    } else {
-      this.loginAttempts.set(email.toLowerCase(), { count: newCount });
-    }
+  private async recordFailedAttempt(email: string): Promise<void> {
+    await this.prisma.loginAttempt.create({ data: { email } });
+    // Opportunistic cleanup keeps the table small.
+    await this.prisma.loginAttempt.deleteMany({
+      where: {
+        email,
+        createdAt: {
+          lt: new Date(Date.now() - this.securityConfig.lockoutDuration),
+        },
+      },
+    });
   }
 
-  private clearFailedAttempts(email: string): void {
-    this.loginAttempts.delete(email.toLowerCase());
+  private async clearFailedAttempts(email: string): Promise<void> {
+    await this.prisma.loginAttempt.deleteMany({ where: { email } });
   }
 
   private async logSecurityEvent(

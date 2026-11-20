@@ -32,6 +32,10 @@ export class VerificationTokenRepository {
     });
   }
 
+  async deleteByUserIdAndType(userId: string, type: string): Promise<void> {
+    await this.prisma.verificationToken.deleteMany({ where: { userId, type } });
+  }
+
   async deleteByUserId(userId: string): Promise<void> {
     await this.prisma.verificationToken.deleteMany({
       where: { userId },

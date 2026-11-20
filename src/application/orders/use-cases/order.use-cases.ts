@@ -10,6 +10,7 @@ import { OrderRepository } from '../../../infrastructure/orders/repositories/ord
 import { TicketRepository } from '../../../infrastructure/tickets/repositories/ticket.repository';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 import { PromoCodeUseCases } from '../../promo-codes/use-cases/promo-code.use-cases';
+import { NotificationService } from '../../notifications/notification.service';
 import { CreateOrderDto, OrderQueryDto } from '../dto/order.dto';
 import {
   OrderStatus,
@@ -30,6 +31,7 @@ export class OrderUseCases {
     private eventRepository: EventRepository,
     private promoCodeUseCases: PromoCodeUseCases,
     private config: ConfigService,
+    private notifications: NotificationService,
   ) {}
 
   async create(dto: CreateOrderDto, user: Actor): Promise<OrderWithItems> {
@@ -101,7 +103,7 @@ export class OrderUseCases {
 
     const holdMinutes = Number(this.config.get('ORDER_HOLD_MINUTES') ?? 15);
 
-    return this.orderRepository.placeOrder({
+    const order = await this.orderRepository.placeOrder({
       reference: OrderUseCases.generateReference(),
       userId: user.id,
       currency: this.config.get('DEFAULT_CURRENCY') ?? 'USD',
@@ -112,6 +114,10 @@ export class OrderUseCases {
       expiresAt: new Date(now.getTime() + holdMinutes * 60_000),
       promo,
     });
+    if (order.status === OrderStatus.PAID) {
+      void this.notifications.sendOrderConfirmation(order.id);
+    }
+    return order;
   }
 
   async findById(id: string, user: Actor): Promise<OrderWithItems> {

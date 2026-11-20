@@ -2,6 +2,8 @@ import {
   IsEmail,
   IsString,
   MinLength,
+  MaxLength,
+  IsUrl,
   IsOptional,
   IsIn,
 } from 'class-validator';
@@ -34,6 +36,41 @@ export class LoginDto {
 }
 
 export class RefreshTokenDto {
+  /** Optional: falls back to the refresh_token cookie. */
   @IsString()
-  refreshToken: string;
+  @IsOptional()
+  refreshToken?: string;
+}
+
+export class EmailDto {
+  @IsEmail()
+  email: string;
+}
+
+export class TokenDto {
+  @IsString()
+  @MaxLength(256)
+  token: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MaxLength(256)
+  token: string;
+
+  @IsString()
+  @MaxLength(128)
+  password: string;
+}
+
+export class UpdateProfileDto {
+  @IsString()
+  @MaxLength(100)
+  @IsOptional()
+  name?: string;
+
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(500)
+  @IsOptional()
+  avatar?: string;
 }

@@ -14,6 +14,7 @@ export async function createApp(): Promise<INestApplication> {
   process.env.JWT_SECRET ??= 'e2e-test-secret';
   process.env.TICKET_SIGNING_SECRET ??= 'e2e-ticket-secret';
   process.env.PAYMENT_PROVIDER = 'fake';
+  process.env.MAIL_PROVIDER = 'log';
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
@@ -65,6 +66,11 @@ export function api(app: INestApplication, user: TestUser) {
   return {
     get: (url: string) =>
       request(server).get(`/api/v1${url}`).set('Cookie', user.cookie),
+    patch: (url: string, body?: object) =>
+      request(server)
+        .patch(`/api/v1${url}`)
+        .set('Cookie', user.cookie)
+        .send(body ?? {}),
     post: (url: string, body?: object) =>
       request(server)
         .post(`/api/v1${url}`)

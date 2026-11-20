@@ -5,137 +5,166 @@ import {
   Body,
   Res,
   Req,
+  HttpCode,
   HttpStatus,
   UseGuards,
-  Redirect,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ApiTags } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, RefreshTokenDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  RefreshTokenDto,
+  EmailDto,
+  TokenDto,
+  ResetPasswordDto,
+} from './dto/auth.dto';
 import { Public } from './decorators/public.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { SsoGuard } from './guards/sso.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 
+type SsoResult = {
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; email: string; role: string };
+};
+
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private config: ConfigService,
+  ) {}
 
   @Public()
   @Post('register')
-  async register(
-    @Body() dto: RegisterDto,
-    @Res() res: Response,
-    @Req() req: Request,
-  ) {
-    const requestInfo = this.getRequestInfo(req);
-    const result = await this.authService.register(dto, requestInfo);
-
-    this.setCookies(res, result.accessToken, result.refreshToken);
-
-    return res.status(HttpStatus.CREATED).json({
-      user: result.user,
-    });
+  async register(@Body() dto: RegisterDto, @Req() req: Request) {
+    return this.authService.register(dto, this.getRequestInfo(req));
   }
 
   @Public()
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
     @Req() req: Request,
   ) {
-    const requestInfo = this.getRequestInfo(req);
-    const result = await this.authService.login(dto, requestInfo);
-
+    const result = await this.authService.login(dto, this.getRequestInfo(req));
     this.setCookies(res, result.accessToken, result.refreshToken);
-
-    return res.status(HttpStatus.OK).json({
-      user: result.user,
-    });
+    return { user: result.user };
   }
 
   @Public()
   @Post('refresh')
+  @HttpCode(HttpStatus.OK)
   async refresh(
     @Body() dto: RefreshTokenDto,
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
     @Req() req: Request,
   ) {
-    const requestInfo = this.getRequestInfo(req);
+    const token = dto.refreshToken ?? req.cookies?.refresh_token;
     const result = await this.authService.refreshToken(
-      dto.refreshToken,
-      requestInfo,
+      token,
+      this.getRequestInfo(req),
     );
-
     this.setCookies(res, result.accessToken, result.refreshToken);
-
-    return res.status(HttpStatus.OK).json({
-      user: result.user,
-    });
+    return { user: result.user };
   }
 
   @Public()
   @Post('logout')
-  async logout(@Req() req: Request, @Res() res: Response) {
-    const token = req.cookies?.access_token;
-    const requestInfo = this.getRequestInfo(req);
-
+  @HttpCode(HttpStatus.OK)
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const bearer = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.slice(7)
+      : undefined;
+    const token = req.cookies?.access_token ?? bearer;
     if (token) {
-      await this.authService.logout(token, requestInfo);
+      await this.authService.logout(token, this.getRequestInfo(req));
     }
-
     this.clearCookies(res);
-
-    return res
-      .status(HttpStatus.OK)
-      .json({ message: 'Logged out successfully' });
+    return { message: 'Logged out successfully' };
   }
 
   @Public()
-  @Get('google')
-  @UseGuards()
-  async googleAuth() {}
-
-  @Public()
-  @Get('google/callback')
-  @UseGuards()
-  @Redirect()
-  async googleAuthRedirect() {
-    return { url: '/dashboard' };
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: TokenDto) {
+    return this.authService.verifyEmail(dto.token);
   }
 
   @Public()
-  @Get('facebook')
-  @UseGuards()
-  async facebookAuth() {}
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.ACCEPTED)
+  resendVerification(@Body() dto: EmailDto) {
+    return this.authService.resendVerification(dto.email);
+  }
 
   @Public()
-  @Get('facebook/callback')
-  @UseGuards()
-  @Redirect()
-  async facebookAuthRedirect() {
-    return { url: '/dashboard' };
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  forgotPassword(@Body() dto: EmailDto, @Req() req: Request) {
+    return this.authService.forgotPassword(dto.email, this.getRequestInfo(req));
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    return this.authService.resetPassword(
+      dto.token,
+      dto.password,
+      this.getRequestInfo(req),
+    );
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getProfile(@CurrentUser() user: any) {
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    };
+    return { id: user.id, email: user.email, role: user.role };
+  }
+
+  // --- SSO -----------------------------------------------------------------
+  // Google: browser redirect flow. Facebook: client sends a Facebook access
+  // token (passport-facebook-token), e.g. from the FB JS SDK.
+
+  @Public()
+  @Get('google')
+  @UseGuards(SsoGuard('google'))
+  googleAuth() {
+    // Passport redirects to Google.
   }
 
   @Public()
-  @Post('verify-email')
-  async verifyEmail(@Body('token') token: string) {
-    return this.authService.verifyEmail(token);
+  @Get('google/callback')
+  @UseGuards(SsoGuard('google'))
+  googleCallback(@Req() req: Request, @Res() res: Response) {
+    const result = req.user as SsoResult;
+    this.setCookies(res, result.accessToken, result.refreshToken);
+    const frontend = this.config.get('FRONTEND_URL') ?? 'http://localhost:5173';
+    return res.redirect(`${String(frontend).replace(/\/$/, '')}/`);
+  }
+
+  @Public()
+  @Post('facebook')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SsoGuard('facebook'))
+  facebookToken(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = req.user as SsoResult;
+    this.setCookies(res, result.accessToken, result.refreshToken);
+    return { user: result.user };
   }
 
   private setCookies(res: Response, accessToken: string, refreshToken: string) {
     const options = this.authService.getCookieOptions();
-
     res.cookie('access_token', accessToken, options.accessToken);
     res.cookie('refresh_token', refreshToken, options.refreshToken);
   }
