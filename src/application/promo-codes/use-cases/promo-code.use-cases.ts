@@ -38,6 +38,11 @@ export class PromoCodeUseCases {
     userId: string,
     userRole: string,
   ): Promise<PromoCodeModel> {
+    if (!dto.eventId && userRole !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only admins can create promo codes that apply to every event',
+      );
+    }
     if (dto.eventId) {
       const event = await this.eventRepository.findById(dto.eventId);
       if (!event) {
@@ -86,14 +91,62 @@ export class PromoCodeUseCases {
     return promoCode;
   }
 
-  async findAll(query: PromoCodeQueryDto): Promise<PromoCodeModel[]> {
-    return this.promoCodeRepository.findAll({
+  /** Organizers only see codes for their own events; admins see everything. */
+  private async assertCanManage(
+    promoCode: PromoCodeModel,
+    userId: string,
+    userRole: string,
+    action: string,
+  ): Promise<void> {
+    if (userRole === 'ADMIN') return;
+    // Global codes (no event) are admin-only.
+    const event = promoCode.eventId
+      ? await this.eventRepository.findById(promoCode.eventId)
+      : null;
+    if (!event || event.organizerId !== userId) {
+      throw new ForbiddenException(
+        `You can only ${action} promo codes for your own events`,
+      );
+    }
+  }
+
+  async findOwned(
+    id: string,
+    userId: string,
+    userRole: string,
+  ): Promise<PromoCodeModel> {
+    const promoCode = await this.findById(id);
+    await this.assertCanManage(promoCode, userId, userRole, 'view');
+    return promoCode;
+  }
+
+  async findAll(
+    query: PromoCodeQueryDto,
+    userId: string,
+    userRole: string,
+  ): Promise<PromoCodeModel[]> {
+    const codes = await this.promoCodeRepository.findAll({
       eventId: query.eventId,
       isActive: query.isActive,
     });
+    if (userRole === 'ADMIN') return codes;
+    const mine = await this.eventRepository.findByOrganizer(userId);
+    const ids = new Set(mine.map((e) => e.id));
+    return codes.filter((c) => c.eventId && ids.has(c.eventId));
   }
 
-  async findByEventId(eventId: string): Promise<PromoCodeModel[]> {
+  async findByEventId(
+    eventId: string,
+    userId: string,
+    userRole: string,
+  ): Promise<PromoCodeModel[]> {
+    const event = await this.eventRepository.findById(eventId);
+    if (!event) throw new NotFoundException('Event not found');
+    if (userRole !== 'ADMIN' && event.organizerId !== userId) {
+      throw new ForbiddenException(
+        'You can only view promo codes for your own events',
+      );
+    }
     return this.promoCodeRepository.findByEventId(eventId);
   }
 
@@ -104,15 +157,7 @@ export class PromoCodeUseCases {
     userRole: string,
   ): Promise<PromoCodeModel> {
     const promoCode = await this.findById(id);
-
-    if (promoCode.eventId) {
-      const event = await this.eventRepository.findById(promoCode.eventId);
-      if (event && event.organizerId !== userId && userRole !== 'ADMIN') {
-        throw new ForbiddenException(
-          'You can only update promo codes for your own events',
-        );
-      }
-    }
+    await this.assertCanManage(promoCode, userId, userRole, 'update');
 
     const effectiveType = dto.discountType ?? promoCode.discountType;
     const effectiveValue = dto.discountValue ?? promoCode.discountValue;
@@ -133,15 +178,7 @@ export class PromoCodeUseCases {
 
   async delete(id: string, userId: string, userRole: string): Promise<void> {
     const promoCode = await this.findById(id);
-
-    if (promoCode.eventId) {
-      const event = await this.eventRepository.findById(promoCode.eventId);
-      if (event && event.organizerId !== userId && userRole !== 'ADMIN') {
-        throw new ForbiddenException(
-          'You can only delete promo codes for your own events',
-        );
-      }
-    }
+    await this.assertCanManage(promoCode, userId, userRole, 'delete');
 
     return this.promoCodeRepository.delete(id);
   }

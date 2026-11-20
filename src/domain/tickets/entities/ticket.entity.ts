@@ -49,6 +49,8 @@ export interface UpdateTicketInput {
 }
 
 export interface TicketFilters {
+  /** Hides tickets of draft events from everyone except organizer/admin. */
+  visibleTo?: { id: string; role: string };
   eventId?: string;
   ticketType?: TicketType;
 }

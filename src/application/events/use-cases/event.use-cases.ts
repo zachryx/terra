@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
 import {
@@ -18,7 +20,14 @@ import {
 export class EventUseCases {
   constructor(private eventRepository: EventRepository) {}
 
+  private assertDateRange(start: Date, end: Date) {
+    if (!(end > start)) {
+      throw new BadRequestException('endDate must be after startDate');
+    }
+  }
+
   async create(dto: CreateEventDto, organizerId: string): Promise<Event> {
+    this.assertDateRange(new Date(dto.startDate), new Date(dto.endDate));
     return this.eventRepository.create({
       name: dto.name,
       description: dto.description,
@@ -39,8 +48,28 @@ export class EventUseCases {
     return event;
   }
 
-  async findAll(query: EventQueryDto): Promise<Event[]> {
+  /** Drafts are only visible to their organizer and admins. */
+  async findVisible(
+    id: string,
+    viewer: { id: string; role: string },
+  ): Promise<Event> {
+    const event = await this.findById(id);
+    if (
+      event.status === EventStatus.DRAFT &&
+      event.organizerId !== viewer.id &&
+      viewer.role !== 'ADMIN'
+    ) {
+      throw new NotFoundException('Event not found');
+    }
+    return event;
+  }
+
+  async findAll(
+    query: EventQueryDto,
+    viewer: { id: string; role: string },
+  ): Promise<Event[]> {
     return this.eventRepository.findAll({
+      visibleTo: viewer,
       status: query.status,
       startDate: query.startDate ? new Date(query.startDate) : undefined,
       endDate: query.endDate ? new Date(query.endDate) : undefined,
@@ -63,6 +92,11 @@ export class EventUseCases {
       throw new ForbiddenException('You can only update your own events');
     }
 
+    this.assertDateRange(
+      dto.startDate ? new Date(dto.startDate) : event.startDate,
+      dto.endDate ? new Date(dto.endDate) : event.endDate,
+    );
+
     const updateData: any = { ...dto };
     if (dto.startDate) {
       updateData.startDate = new Date(dto.startDate);
@@ -79,6 +113,11 @@ export class EventUseCases {
 
     if (event.organizerId !== userId && userRole !== 'ADMIN') {
       throw new ForbiddenException('You can only delete your own events');
+    }
+    if (await this.eventRepository.hasOrders(id)) {
+      throw new ConflictException(
+        'This event has orders and cannot be deleted. Cancel it instead.',
+      );
     }
 
     return this.eventRepository.delete(id);

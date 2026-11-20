@@ -35,18 +35,24 @@ export class PromoCodeController {
   }
 
   @Get()
-  findAll(@Query() query: PromoCodeQueryDto) {
-    return this.promoCodeUseCases.findAll(query);
+  @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
+  findAll(@Query() query: PromoCodeQueryDto, @CurrentUser() user: any) {
+    return this.promoCodeUseCases.findAll(query, user.id, user.role);
   }
 
   @Get('event/:eventId')
-  findByEventId(@Param('eventId', ParseUUIDPipe) eventId: string) {
-    return this.promoCodeUseCases.findByEventId(eventId);
+  @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
+  findByEventId(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.promoCodeUseCases.findByEventId(eventId, user.id, user.role);
   }
 
   @Get(':id')
-  findById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.promoCodeUseCases.findById(id);
+  @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
+  findById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.promoCodeUseCases.findOwned(id, user.id, user.role);
   }
 
   @Put(':id')

@@ -60,10 +60,6 @@ export class UpdateEventDto {
   @IsOptional()
   capacity?: number;
 
-  @IsEnum(EventStatus)
-  @IsOptional()
-  status?: EventStatus;
-
   @IsString()
   @IsOptional()
   imageUrl?: string;

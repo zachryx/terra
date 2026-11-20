@@ -69,6 +69,13 @@ export function api(app: INestApplication, user: TestUser) {
   return {
     get: (url: string) =>
       request(server).get(`/api/v1${url}`).set('Cookie', user.cookie),
+    put: (url: string, body?: object) =>
+      request(server)
+        .put(`/api/v1${url}`)
+        .set('Cookie', user.cookie)
+        .send(body ?? {}),
+    delete: (url: string) =>
+      request(server).delete(`/api/v1${url}`).set('Cookie', user.cookie),
     patch: (url: string, body?: object) =>
       request(server)
         .patch(`/api/v1${url}`)

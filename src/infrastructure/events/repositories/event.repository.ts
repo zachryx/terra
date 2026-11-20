@@ -44,6 +44,13 @@ export class EventRepository implements IEventRepository {
       where.status = filters.status;
     }
 
+    if (filters?.visibleTo && filters.visibleTo.role !== 'ADMIN') {
+      where.OR = [
+        { status: { not: EventStatus.DRAFT } },
+        { organizerId: filters.visibleTo.id },
+      ];
+    }
+
     if (filters?.organizerId) {
       where.organizerId = filters.organizerId;
     }
@@ -60,6 +67,13 @@ export class EventRepository implements IEventRepository {
       where,
       orderBy: { startDate: 'asc' },
     }) as Promise<Event[]>;
+  }
+
+  async hasOrders(eventId: string): Promise<boolean> {
+    const count = await this.prisma.orderItem.count({
+      where: { ticket: { eventId } },
+    });
+    return count > 0;
   }
 
   async findByOrganizer(organizerId: string): Promise<Event[]> {

@@ -41,7 +41,14 @@ export interface UpdateEventInput {
   imageUrl?: string;
 }
 
+export interface Viewer {
+  id: string;
+  role: string;
+}
+
 export interface EventFilters {
+  /** Hides drafts from everyone except their organizer and admins. */
+  visibleTo?: Viewer;
   status?: EventStatus;
   organizerId?: string;
   startDate?: Date;

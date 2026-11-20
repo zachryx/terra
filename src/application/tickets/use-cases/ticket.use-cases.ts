@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
 import { TicketRepository } from '../../../infrastructure/tickets/repositories/ticket.repository';
@@ -60,14 +61,30 @@ export class TicketUseCases {
     return ticket;
   }
 
-  async findAll(query: TicketQueryDto): Promise<TicketModel[]> {
+  async findAll(
+    query: TicketQueryDto,
+    viewer: { id: string; role: string },
+  ): Promise<TicketModel[]> {
     return this.ticketRepository.findAll({
+      visibleTo: viewer,
       eventId: query.eventId,
       ticketType: query.ticketType,
     });
   }
 
-  async findByEventId(eventId: string): Promise<TicketModel[]> {
+  async findByEventId(
+    eventId: string,
+    viewer: { id: string; role: string },
+  ): Promise<TicketModel[]> {
+    const event = await this.eventRepository.findById(eventId);
+    if (
+      !event ||
+      (event.status === 'DRAFT' &&
+        event.organizerId !== viewer.id &&
+        viewer.role !== 'ADMIN')
+    ) {
+      throw new NotFoundException('Event not found');
+    }
     return this.ticketRepository.findByEventId(eventId);
   }
 
@@ -117,6 +134,11 @@ export class TicketUseCases {
     if (event.organizerId !== userId && userRole !== 'ADMIN') {
       throw new ForbiddenException(
         'You can only delete tickets for your own events',
+      );
+    }
+    if (await this.ticketRepository.hasOrders(id)) {
+      throw new ConflictException(
+        'This ticket has orders and cannot be deleted. Reduce its quantity instead.',
       );
     }
 

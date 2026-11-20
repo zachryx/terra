@@ -34,8 +34,8 @@ export class EventController {
   }
 
   @Get()
-  findAll(@Query() query: EventQueryDto) {
-    return this.eventUseCases.findAll(query);
+  findAll(@Query() query: EventQueryDto, @CurrentUser() user: any) {
+    return this.eventUseCases.findAll(query, user);
   }
 
   @Get('my-events')
@@ -45,8 +45,8 @@ export class EventController {
   }
 
   @Get(':id')
-  findById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.eventUseCases.findById(id);
+  findById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.eventUseCases.findVisible(id, user);
   }
 
   @Put(':id')

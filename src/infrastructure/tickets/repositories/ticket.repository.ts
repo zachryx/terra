@@ -45,6 +45,14 @@ export class TicketRepository implements ITicketRepository {
     if (filters?.eventId) {
       where.eventId = filters.eventId;
     }
+    if (filters?.visibleTo && filters.visibleTo.role !== 'ADMIN') {
+      where.event = {
+        OR: [
+          { status: { not: 'DRAFT' } },
+          { organizerId: filters.visibleTo.id },
+        ],
+      };
+    }
     if (filters?.ticketType) {
       where.ticketType = filters.ticketType;
     }
@@ -73,6 +81,10 @@ export class TicketRepository implements ITicketRepository {
     await this.prisma.ticket.delete({
       where: { id },
     });
+  }
+
+  async hasOrders(id: string): Promise<boolean> {
+    return (await this.prisma.orderItem.count({ where: { ticketId: id } })) > 0;
   }
 
   async updateSoldCount(id: string, quantity: number): Promise<TicketModel> {

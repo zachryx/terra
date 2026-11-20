@@ -34,13 +34,16 @@ export class TicketController {
   }
 
   @Get()
-  findAll(@Query() query: TicketQueryDto) {
-    return this.ticketUseCases.findAll(query);
+  findAll(@Query() query: TicketQueryDto, @CurrentUser() user: any) {
+    return this.ticketUseCases.findAll(query, user);
   }
 
   @Get('event/:eventId')
-  findByEventId(@Param('eventId', ParseUUIDPipe) eventId: string) {
-    return this.ticketUseCases.findByEventId(eventId);
+  findByEventId(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketUseCases.findByEventId(eventId, user);
   }
 
   @Get(':id')

@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { OrderRepository } from '../../../infrastructure/orders/repositories/order.repository';
 import { TicketRepository } from '../../../infrastructure/tickets/repositories/ticket.repository';
 import { EventRepository } from '../../../infrastructure/events/repositories/event.repository';
+import { PromoCodeRepository } from '../../../infrastructure/promo-codes/repositories/promo-code.repository';
 import { PromoCodeUseCases } from '../../promo-codes/use-cases/promo-code.use-cases';
 import { NotificationService } from '../../notifications/notification.service';
 import { CreateOrderDto, OrderQueryDto } from '../dto/order.dto';
@@ -30,6 +31,7 @@ export class OrderUseCases {
     private ticketRepository: TicketRepository,
     private eventRepository: EventRepository,
     private promoCodeUseCases: PromoCodeUseCases,
+    private promoCodeRepository: PromoCodeRepository,
     private config: ConfigService,
     private notifications: NotificationService,
   ) {}
@@ -86,10 +88,23 @@ export class OrderUseCases {
     let discountAmount = 0;
     let promo: { id: string } | undefined;
     if (dto.promoCode) {
+      // A promo tied to one ticket only discounts that ticket's lines.
+      const row = await this.promoCodeRepository.findByCode(dto.promoCode);
+      let eligibleAmount = totalAmount;
+      if (row?.ticketTypeId) {
+        eligibleAmount = items
+          .filter((i) => i.ticketId === row.ticketTypeId)
+          .reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+        if (eligibleAmount === 0) {
+          throw new BadRequestException(
+            'Promo code does not apply to the selected tickets',
+          );
+        }
+      }
       const result = await this.promoCodeUseCases.validate(
         {
           code: dto.promoCode,
-          purchaseAmount: totalAmount,
+          purchaseAmount: eligibleAmount,
           eventId,
         },
         user.id,
