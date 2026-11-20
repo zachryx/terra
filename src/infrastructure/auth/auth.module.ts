@@ -32,8 +32,24 @@ import { SecurityLogRepository } from './repositories/security-log.repository';
   providers: [
     AuthService,
     JwtStrategy,
-    GoogleStrategy,
-    FacebookStrategy,
+    // SSO strategies are optional: only constructed when credentials are set,
+    // so the app can boot from a fresh clone with an empty .env.example.
+    {
+      provide: GoogleStrategy,
+      inject: [ConfigService, AuthService],
+      useFactory: (config: ConfigService, auth: AuthService) =>
+        config.get('GOOGLE_CLIENT_ID') && config.get('GOOGLE_CLIENT_SECRET')
+          ? new GoogleStrategy(config, auth)
+          : null,
+    },
+    {
+      provide: FacebookStrategy,
+      inject: [ConfigService, AuthService],
+      useFactory: (config: ConfigService, auth: AuthService) =>
+        config.get('FACEBOOK_CLIENT_ID') && config.get('FACEBOOK_CLIENT_SECRET')
+          ? new FacebookStrategy(config, auth)
+          : null,
+    },
     JwtAuthGuard,
     RolesGuard,
     UserRepository,
