@@ -93,6 +93,8 @@ See [`.env.example`](.env.example). The ones that matter:
 | `MAIL_PROVIDER` | `log` (default) or `smtp` (+ `SMTP_*`) |
 | `DEFAULT_CURRENCY`, `ORDER_HOLD_MINUTES` | Order currency (single currency per deployment) and unpaid-order hold |
 | `THROTTLE_LIMIT`, `STRICT_THROTTLE_LIMIT` | Requests/min per IP; strict tier covers login, register, password flows, checkout |
+| `REDIS_URL` | Optional: shared rate limits, caches, sold-out gate (run Redis with AOF and `noeviction`) |
+| `DB_POOL_MAX`, `LOG_REQUESTS` | Per-instance DB pool size; per-request access log on/off |
 | `GOOGLE_*`, `FACEBOOK_*` | Optional SSO; routes return 404 when unset |
 | `FRONTEND_URL`, `CORS_ORIGIN`, `TRUST_PROXY` | Email links, CORS, client-IP handling behind a proxy |
 
@@ -121,7 +123,7 @@ tickets, promos, orders and reports. Self-registration can't grant `ADMIN`.
 
 ```bash
 npm test                # unit tests (pure logic: ticket codes, discounts, CSV)
-npm run test:e2e        # 63 end-to-end tests against a real Postgres
+npm run test:e2e        # ~80 end-to-end tests against a real Postgres (+ Redis suites if TEST_REDIS_URL is set)
 npm run test:e2e:cov    # ~87% statements / ~87% lines across src
 ```
 
@@ -130,6 +132,29 @@ E2E tests need `DATABASE_URL` (a throwaway database, since tests create data), `
 the concurrency guarantees above, authorization boundaries, the full pay → ticket → check-in →
 refund → analytics path, password reset, lockout, token rotation and email content. CI runs
 lint, build, migrations, a schema-drift check, and both test suites.
+
+## Scaling
+
+Measured with k6 (`loadtest/`), one API process plus Postgres on one 8-core machine, during a
+100-buyer flash sale on a single ticket *while* serving browse traffic. Stock never oversold in any run.
+
+| | Browse p95 | Sustained req/s | Dropped requests |
+|---|---|---|---|
+| Original code (200 req/s offered) | 5.8 s | ~105 | 3,006, plus HTTP 500s |
+| + cursor pagination (200 req/s) | 303 ms | ~213 | 0 |
+| + pagination, no Redis (600 req/s) | 1.7 s | ~370 | 6,831 |
+| + pagination + Redis (600 req/s) | **30 ms** | **~586** | 131 (ramp-up) |
+
+What got it there, in order of impact:
+
+- **Bounded lists.** The biggest win was a fix, not a feature: `GET /events` returned every event ever created (383 KB). All list endpoints are now cursor-paginated (`{ items, nextCursor }`).
+- **Optional Redis** (`REDIS_URL`): rate limits shared across replicas, a short auth/session cache (invalidated on logout, token refresh and password reset, on every replica), an attendee-only cache for event lists and ticket availability, and an advisory "sold out" flag so a sold-out on-sale stops costing Postgres transactions. Redis can disappear at any time: every call fails open and Postgres stays the source of truth.
+- **Backpressure, not crashes.** DB pool starvation returns `503 + Retry-After` instead of a 500; pool size and transaction queueing are configurable (`DB_POOL_MAX`, `DB_TX_*`).
+- **`Idempotency-Key` on checkout**, so client retries can't double-buy.
+- Expired-order sweeps drain their backlog oldest-first in bounded batches.
+
+Caveats: numbers are single-machine and relative, not capacity claims; cached reads may lag by seconds
+by design (checkout never uses the cache). Reproduce with `loadtest/run.sh` (see `loadtest/README.md`).
 
 ## Security notes
 
@@ -144,7 +169,7 @@ lint, build, migrations, a schema-drift check, and both test suites.
 
 Deliberately out of scope for now: sponsor management, push/SMS notifications, embeddable widgets,
 calendar sync, API keys and outbound webhooks, offline check-in, ticket transfer/resale, multi-event
-orders, multi-currency, guest checkout.
+orders, multi-currency, guest checkout, a virtual waiting room for extreme on-sales.
 
 Honest caveats: the Stripe adapter is written against the official SDK but only the fake gateway is
 exercised in tests; Google/Facebook sign-in are wired but untested against real credentials.
