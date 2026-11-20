@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { OrderUseCases } from '../../../application/orders/use-cases/order.use-cases';
@@ -14,6 +15,7 @@ import {
   CreateOrderDto,
   OrderQueryDto,
 } from '../../../application/orders/dto/order.dto';
+import { IdempotencyInterceptor } from '../../common/idempotency/idempotency.interceptor';
 import { StrictThrottle } from '../../common/throttle/strict-throttle.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -26,6 +28,7 @@ export class OrderController {
   constructor(private orderUseCases: OrderUseCases) {}
 
   @StrictThrottle()
+  @UseInterceptors(IdempotencyInterceptor)
   @Post()
   create(@Body() dto: CreateOrderDto, @CurrentUser() user: any) {
     return this.orderUseCases.create(dto, user);

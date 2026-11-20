@@ -305,3 +305,19 @@ model LoginAttempt {
 
   @@index([email, createdAt])
 }
+
+model IdempotencyKey {
+  id             String   @id @default(uuid())
+  userId         String
+  key            String
+  /// "METHOD /route" the key was first used on
+  scope          String
+  requestHash    String
+  /// null while the first request is still in flight
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
+}
