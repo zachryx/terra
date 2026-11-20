@@ -16,13 +16,33 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '${API_PORT:-3000}:3000'
+    environment:
+      NODE_ENV: development # keeps Swagger at /api; use production for real deploys
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-terra}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-jwt-secret}
+      TICKET_SIGNING_SECRET: ${TICKET_SIGNING_SECRET:-dev-only-change-me-ticket-secret}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-fake}
+      MAIL_PROVIDER: smtp
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+
   # Local SMTP sink with a web UI at http://localhost:8025
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - '1025:1025'
-      - '8025:8025'
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${MAILPIT_UI_PORT:-8025}:8025'
 
 volumes:
   terra-db:
