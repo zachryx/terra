@@ -122,7 +122,7 @@ describe('Payments & fulfilment (e2e)', () => {
 
     const results = await Promise.all(
       Array.from({ length: 5 }, () =>
-        sendWebhook(succeeded(order.id, 4000, 'evt_same')),
+        sendWebhook(succeeded(order.id, 4000, `evt_same_${order.id}`)),
       ),
     );
     results.forEach((r) => expect(r.status).toBe(200));

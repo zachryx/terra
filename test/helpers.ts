@@ -20,6 +20,9 @@ export async function createApp(): Promise<INestApplication> {
   const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
   await app.init();
+  // One real listener (ephemeral port) shared by all requests; supertest would
+  // otherwise open a new server per call and reset connections under bursts.
+  await app.listen(0);
   return app;
 }
 
