@@ -14,6 +14,7 @@ import {
   CreateOrderDto,
   OrderQueryDto,
 } from '../../../application/orders/dto/order.dto';
+import { StrictThrottle } from '../../common/throttle/strict-throttle.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 
@@ -24,6 +25,7 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 export class OrderController {
   constructor(private orderUseCases: OrderUseCases) {}
 
+  @StrictThrottle()
   @Post()
   create(@Body() dto: CreateOrderDto, @CurrentUser() user: any) {
     return this.orderUseCases.create(dto, user);

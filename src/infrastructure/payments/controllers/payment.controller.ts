@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { PaymentUseCases } from '../../../application/payments/payment.use-cases';
@@ -53,6 +54,7 @@ export class PaymentController {
 
   /** Provider -> Terra. Authenticated by signature, not by cookie. */
   @Public()
+  @SkipThrottle()
   @Post('payments/webhook')
   @HttpCode(200)
   webhook(

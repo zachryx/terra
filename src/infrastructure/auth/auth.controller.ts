@@ -21,6 +21,7 @@ import {
   TokenDto,
   ResetPasswordDto,
 } from './dto/auth.dto';
+import { StrictThrottle } from '../common/throttle/strict-throttle.decorator';
 import { Public } from './decorators/public.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { SsoGuard } from './guards/sso.guard';
@@ -41,12 +42,14 @@ export class AuthController {
   ) {}
 
   @Public()
+  @StrictThrottle()
   @Post('register')
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
     return this.authService.register(dto, this.getRequestInfo(req));
   }
 
   @Public()
+  @StrictThrottle()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -92,6 +95,7 @@ export class AuthController {
   }
 
   @Public()
+  @StrictThrottle()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   verifyEmail(@Body() dto: TokenDto) {
@@ -99,6 +103,7 @@ export class AuthController {
   }
 
   @Public()
+  @StrictThrottle()
   @Post('resend-verification')
   @HttpCode(HttpStatus.ACCEPTED)
   resendVerification(@Body() dto: EmailDto) {
@@ -106,6 +111,7 @@ export class AuthController {
   }
 
   @Public()
+  @StrictThrottle()
   @Post('forgot-password')
   @HttpCode(HttpStatus.ACCEPTED)
   forgotPassword(@Body() dto: EmailDto, @Req() req: Request) {
@@ -113,6 +119,7 @@ export class AuthController {
   }
 
   @Public()
+  @StrictThrottle()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {

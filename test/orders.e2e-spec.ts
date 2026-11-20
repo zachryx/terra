@@ -254,8 +254,9 @@ describe('Checkout (e2e)', () => {
       data: { expiresAt: new Date(Date.now() - 60_000) },
     });
 
-    const released = await app.get(OrderUseCases).expireStaleOrders();
-    expect(released).toBeGreaterThanOrEqual(1);
+    // Another suite's cron (same shared DB) may release it first, so only the
+    // end state is asserted, not who performed the release.
+    await app.get(OrderUseCases).expireStaleOrders();
     expect(await soldOf(ticket.id)).toBe(0);
     const stored = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },

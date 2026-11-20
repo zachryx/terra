@@ -14,6 +14,9 @@ export async function createApp(): Promise<INestApplication> {
   process.env.JWT_SECRET ??= 'e2e-test-secret';
   process.env.TICKET_SIGNING_SECRET ??= 'e2e-ticket-secret';
   process.env.PAYMENT_PROVIDER = 'fake';
+  // Tests create many users/orders from one IP; production limits stay default.
+  process.env.THROTTLE_LIMIT ??= '100000';
+  process.env.STRICT_THROTTLE_LIMIT ??= '100000';
   process.env.MAIL_PROVIDER = 'log';
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],

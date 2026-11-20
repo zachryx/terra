@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { STRICT_THROTTLE_KEY } from './infrastructure/common/throttle/strict-throttle.decorator';
 import { ExceptionModule } from './infrastructure/exceptions/exceptions.module';
 import { LoggerModule } from './infrastructure/logger/logger.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
@@ -22,6 +25,24 @@ import { HealthModule } from './infrastructure/health/health.module';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: 'default',
+          ttl: 60_000,
+          limit: Number(config.get('THROTTLE_LIMIT') ?? 120),
+        },
+        {
+          // Applies only to routes tagged with @StrictThrottle().
+          name: 'strict',
+          ttl: 60_000,
+          limit: Number(config.get('STRICT_THROTTLE_LIMIT') ?? 10),
+          skipIf: (ctx) =>
+            !Reflect.getMetadata(STRICT_THROTTLE_KEY, ctx.getHandler()),
+        },
+      ],
+    }),
     ExceptionModule,
     LoggerModule,
     PrismaModule,
@@ -36,6 +57,6 @@ import { HealthModule } from './infrastructure/health/health.module';
     AnalyticsModule,
     HealthModule,
   ],
-  providers: [],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

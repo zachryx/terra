@@ -11,6 +11,11 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  // Behind a reverse proxy, rate limiting needs the real client IP.
+  if (configService.get('TRUST_PROXY')) {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -57,6 +62,6 @@ async function bootstrap() {
     SwaggerModule.setup('api', app, document);
   }
 
-  await app.listen(3000);
+  await app.listen(Number(configService.get('PORT') ?? 3000));
 }
 bootstrap();
