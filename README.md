@@ -20,6 +20,7 @@ Requires Node 22+ and Docker.
 cp .env.example .env            # defaults work for local dev
 docker compose up -d db mailpit # Postgres + a local SMTP inbox (http://localhost:8025)
 npm ci
+npx prisma generate        # creates the typed DB client (not part of npm ci)
 npx prisma migrate deploy
 npm run seed                    # demo users, events, promos and paid orders
 npm run start:dev               # http://localhost:3000, Swagger at /api

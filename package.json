@@ -23,7 +23,8 @@
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "seed": "ts-node --transpile-only prisma/seed.ts",
     "test:e2e:cov": "jest --config ./test/jest-e2e.json --coverage",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "prebuild": "prisma generate"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
