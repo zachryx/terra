@@ -6,9 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 COPY package*.json ./
 RUN npm ci
 COPY . .
-# prisma.config.ts insists on DATABASE_URL even though `generate` never connects.
-RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate \
-    && npm run build
+# prisma.config.ts insists on DATABASE_URL even though `generate` never connects, and
+# `npm run build` runs `prisma generate` too. A build-stage ARG covers both and does not
+# reach the runtime image.
+ARG DATABASE_URL=postgresql://build:build@localhost:5432/build
+RUN npx prisma generate && npm run build
 
 FROM node:22-slim AS runtime
 WORKDIR /app

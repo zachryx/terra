@@ -56,3 +56,11 @@ jobs:
         run: npm test
       - name: E2E tests
         run: npm run test:e2e
+
+  docker:
+    # The image build runs prisma generate + nest build in a clean environment;
+    # a missing env var or dependency shows up here and nowhere else.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t terra-api:ci .
